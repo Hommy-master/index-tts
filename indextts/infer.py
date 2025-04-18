@@ -184,7 +184,7 @@ class IndexTTS:
         return [
             sentence.strip() for sentence in sentences if sentence.strip() and sentence.strip() not in {"'", ".", ","}
         ]
-        
+
     def bucket_sentences(self, sentences, enable):
         """
         Sentence data bucketing
@@ -287,7 +287,6 @@ class IndexTTS:
         gpt_gen_time = 0
         gpt_forward_time = 0
         bigvgan_time = 0
-
 
         # text processing
         all_text_tokens = []
