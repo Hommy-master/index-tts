@@ -11,6 +11,10 @@ from torch.nn.utils.rnn import pad_sequence
 from omegaconf import OmegaConf
 from tqdm import tqdm
 
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning)
+warnings.filterwarnings("ignore", category=UserWarning)
+
 from indextts.BigVGAN.models import BigVGAN as Generator
 from indextts.gpt.model import UnifiedVoice
 from indextts.utils.checkpoint import load_checkpoint
