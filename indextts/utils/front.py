@@ -103,6 +103,7 @@ class TextNormalizer:
             return ""
         if self.use_chinese(text):
             replaced_text, pinyin_list = self.save_pinyin_tones(text.rstrip())
+            
             replaced_text, original_name_list = self.save_names(replaced_text)
             try:
                 result = self.zh_normalizer.normalize(replaced_text)
@@ -125,18 +126,18 @@ class TextNormalizer:
             result = pattern.sub(lambda x: self.char_rep_map[x.group()], result)
         return result
 
-    def correct_pinyin(self, pinyin):
+    def correct_pinyin(self, pinyin: str):
         """
         将 jqx 的韵母为 u/ü 的拼音转换为 v
         如：ju -> jv , que -> qve, xün -> xvn
         """
-        if pinyin[0] not in "jqx":
+        if pinyin[0] not in "jqxJQX":
             return pinyin
         # 匹配 jqx 的韵母为 u/ü 的拼音
         pattern = r"([jqx])[uü](n|e|an)*(\d)"
         repl = r"\g<1>v\g<2>\g<3>"
-        pinyin = re.sub(pattern, repl, pinyin)
-        return pinyin
+        pinyin = re.sub(pattern, repl, pinyin, flags=re.IGNORECASE)
+        return pinyin.upper()
 
     def save_names(self, original_text):
         """
@@ -413,6 +414,7 @@ if __name__ == "__main__":
     text_normalizer.load()
     cases = [
         "IndexTTS 正式发布1.0版本了，效果666",
+        "晕XUAN4是一种GAN3觉",
         "我爱你！",
         "I love you!",
         "“我爱你”的英语是“I love you”",
