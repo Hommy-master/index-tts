@@ -2,7 +2,7 @@ import os
 import re
 import time
 from subprocess import CalledProcessError
-from typing import List
+from typing import Dict, List, Tuple
 
 import numpy as np
 import sentencepiece as spm
@@ -125,8 +125,13 @@ class IndexTTS:
         self.cache_cond_mel = None
         # 进度引用显示（可选）
         self.gr_progress = None
+        self.model_version = self.cfg.version if hasattr(self.cfg, "version") else None
 
     def remove_long_silence(self, codes: torch.Tensor, silent_token=52, max_consecutive=30):
+        """
+        Shrink special tokens (silent_token and stop_mel_token) in codes
+        codes: [B, T]
+        """
         code_lens = []
         codes_list = []
         device = codes.device
@@ -134,59 +139,92 @@ class IndexTTS:
         isfix = False
         for i in range(0, codes.shape[0]):
             code = codes[i]
-            if self.cfg.gpt.stop_mel_token not in code:
-                code_lens.append(len(code))
-                len_ = len(code)
+            if not torch.any(code == self.stop_mel_token).item():
+                len_ = code.size(0)
             else:
-                # len_ = code.cpu().tolist().index(8193)+1
-                len_ = (code == self.stop_mel_token).nonzero(as_tuple=False)[0] + 1
-                len_ = len_ - 2
+                stop_mel_idx = (code == self.stop_mel_token).nonzero(as_tuple=False)
+                len_ = stop_mel_idx[0].item() if len(stop_mel_idx) > 0 else code.size(0)
 
             count = torch.sum(code == silent_token).item()
             if count > max_consecutive:
-                code = code.cpu().tolist()
-                ncode = []
+                # code = code.cpu().tolist()
+                ncode_idx = []
                 n = 0
-                for k in range(0, len_):
+                for k in range(len_):
+                    assert code[k] != self.stop_mel_token, f"stop_mel_token {self.stop_mel_token} should be shrinked here"
                     if code[k] != silent_token:
-                        ncode.append(code[k])
+                        ncode_idx.append(k)
                         n = 0
                     elif code[k] == silent_token and n < 10:
-                        ncode.append(code[k])
+                        ncode_idx.append(k)
                         n += 1
                     # if (k == 0 and code[k] == 52) or (code[k] == 52 and code[k-1] == 52):
                     #    n += 1
-                len_ = len(ncode)
-                ncode = torch.LongTensor(ncode)
-                codes_list.append(ncode.to(device, dtype=dtype))
+                # new code
+                len_ = len(ncode_idx)
+                codes_list.append(code[ncode_idx])
                 isfix = True
-                # codes[i] = self.stop_mel_token
-                # codes[i, 0:len_] = ncode
             else:
-                codes_list.append(codes[i])
+                # shrink to len_
+                codes_list.append(code[:len_])
             code_lens.append(len_)
-
-        codes = pad_sequence(codes_list, batch_first=True) if isfix else codes[:, :-2]
-        code_lens = torch.LongTensor(code_lens).to(device, dtype=dtype)
+        if isfix:
+            if len(codes_list) > 1:
+                codes = pad_sequence(codes_list, batch_first=True, padding_value=self.stop_mel_token)
+            else:
+                codes = codes_list[0].unsqueeze(0)
+        else:
+            # unchanged
+            pass
+        # clip codes to max length
+        max_len = max(code_lens)
+        if max_len < codes.shape[1]:
+            codes = codes[:, :max_len]
+        code_lens = torch.tensor(code_lens, dtype=torch.long, device=device)
         return codes, code_lens
 
-    def bucket_sentences(self, sentences, enable=False):
+    def bucket_sentences(self, sentences, bucket_max_size=4) -> List[List[Dict]]:
         """
-        Sentence data bucketing
+        Sentence data bucketing.
+        if ``bucket_max_size=1``, return all sentences in one bucket.
         """
-        max_len = max(len(s) for s in sentences)
-        half = max_len // 2
-        outputs = [[], []]
+        outputs: List = []
         for idx, sent in enumerate(sentences):
-            if enable is False or len(sent) <= half:
-                outputs[0].append({"idx": idx, "sent": sent})
-            else:
-                outputs[1].append({"idx": idx, "sent": sent})
-        return [item for item in outputs if item]
+            outputs.append({"idx": idx, "sent": sent, "len": len(sent)})
+       
+        if len(outputs) > bucket_max_size:
+            # split sentences into buckets by sentence length
+            buckets = []
+            factor = 1.5
+            last_bucket_sent_len_median = 0
+            for sent in sorted(outputs, key=lambda x: x["len"]):
+                current_sent_len = sent["len"]
+                if current_sent_len == 0:
+                    print(">> skip empty sentence")
+                    continue
+                if last_bucket_sent_len_median == 0 \
+                        or current_sent_len > last_bucket_sent_len_median * factor \
+                        or len(buckets[-1]) > bucket_max_size:
+                    # new bucket
+                    buckets.append([sent])
+                    last_bucket_sent_len_median = current_sent_len
+                else:
+                    # current bucket can hold more sentences
+                    buckets[-1].append(sent) # sorted
+                    mid = len(buckets[-1]) // 2
+                    last_bucket_sent_len_median = buckets[-1][mid]["len"]
+            return buckets
+        return [outputs]
 
-    def pad_tokens_cat(self, tokens: List[torch.Tensor]):
+
+    def pad_tokens_cat(self, tokens: List[torch.Tensor]) -> torch.Tensor:
         if len(tokens) <= 1:
             return tokens[-1]
+        if self.model_version and self.model_version >= 1.5:
+            # 1.5版本以上，直接使用stop_text_token 右侧填充
+            # [1, N] -> [N,]
+            tokens = [t.squeeze(0) for t in tokens]
+            return pad_sequence(tokens, batch_first=True, padding_value=self.cfg.gpt.stop_text_token, padding_side="right")
         max_len = max(t.size(1) for t in tokens)
         outputs = []
         for tensor in tokens:
@@ -214,8 +252,18 @@ class IndexTTS:
             self.gr_progress(value, desc=desc)
 
     # 快速推理：对于“多句长文本”，可实现至少 2~10 倍以上的速度提升~ （First modified by sunnyboxs 2025-04-16）
-    def infer_fast(self, audio_prompt, text, output_path, verbose=False):
+    def infer_fast(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=100, sentences_bucket_max_size=4):
+        """
+        Args:
+            ``max_text_tokens_per_sentence``: 分句的最大token数，默认``100``，可以根据GPU硬件情况调整
+                - 越小，batch 越多，推理速度越*快*，占用内存更多，可能影响质量
+                - 越大，batch 越少，推理速度越*慢*，占用内存和质量更接近于非快速推理
+            ``sentences_bucket_max_size``: 分句分桶的最大容量，默认``4``，可以根据GPU内存调整
+                - 越大，bucket数量越少，batch越多，推理速度越*快*，占用内存更多，可能影响质量
+                - 越小，bucket数量越多，batch越少，推理速度越*慢*，占用内存和质量更接近于非快速推理
+        """
         print(">> start fast inference...")
+        
         self._set_gr_progress(0, "start fast inference...")
         if verbose:
             print(f"origin text:{text}")
@@ -245,10 +293,12 @@ class IndexTTS:
 
         # text_tokens
         text_tokens_list = self.tokenizer.tokenize(text)
-        sentences = self.tokenizer.split_sentences(text_tokens_list)
+
+        sentences = self.tokenizer.split_sentences(text_tokens_list, max_tokens_per_sentence=max_text_tokens_per_sentence)
         if verbose:
-            print("text token count:", len(text_tokens_list))
-            print("sentences count:", len(sentences))
+            print(">> text token count:", len(text_tokens_list))
+            print("   splited sentences count:", len(sentences))
+            print("   max_text_tokens_per_sentence:", max_text_tokens_per_sentence)
             print(*sentences, sep="\n")
 
         top_p = 0.8
@@ -270,8 +320,11 @@ class IndexTTS:
         # text processing
         all_text_tokens: List[List[torch.Tensor]] = []
         self._set_gr_progress(0.1, "text processing...")
-        bucket_enable = True # 预分桶开关，优先保证质量=True。优先保证速度=False。
-        all_sentences = self.bucket_sentences(sentences, enable=bucket_enable) 
+        bucket_max_size = sentences_bucket_max_size if self.device != "cpu" else 1
+        all_sentences = self.bucket_sentences(sentences, bucket_max_size=bucket_max_size)
+        bucket_count = len(all_sentences)
+        if verbose:
+            print(">> sentences bucket_count:", bucket_count,  [len(s) for s in all_sentences])
         for sentences in all_sentences:
             temp_tokens: List[torch.Tensor] = []
             all_text_tokens.append(temp_tokens)
@@ -294,8 +347,8 @@ class IndexTTS:
         for item_tokens in all_text_tokens:
             batch_num = len(item_tokens)
             batch_text_tokens = self.pad_tokens_cat(item_tokens)
-            batch_cond_mel_lengths = torch.cat([cond_mel_lengths] * batch_num, dim=0)
-            batch_auto_conditioning = torch.cat([auto_conditioning] * batch_num, dim=0)
+            batch_cond_mel_lengths = cond_mel_lengths.expand(batch_num) # [batch_num]
+            batch_auto_conditioning = auto_conditioning.expand(batch_num, -1, -1)  # [batch_num, n_mels, L]
             all_batch_num += batch_num
 
             # gpt speech
@@ -325,11 +378,15 @@ class IndexTTS:
         for batch_codes, batch_tokens, batch_sentences in zip(all_batch_codes, all_text_tokens, all_sentences):
             for i in range(batch_codes.shape[0]):
                 codes = batch_codes[i]  # [x]
-                codes = codes[codes != self.cfg.gpt.stop_mel_token]
-                codes, _ = torch.unique_consecutive(codes, return_inverse=True)
                 codes = codes.unsqueeze(0)  # [x] -> [1, x]
-                code_lens = torch.tensor([codes.shape[-1]], device=codes.device, dtype=codes.dtype)
+                if verbose:
+                    print("codes:", codes.shape)
+                    print(codes)
                 codes, code_lens = self.remove_long_silence(codes, silent_token=52, max_consecutive=30)
+                if verbose:
+                    print("fix codes:", codes.shape)
+                    print(codes)
+                    print("code_lens:", code_lens)
                 text_tokens = batch_tokens[i]
                 all_idxs.append(batch_sentences[i]["idx"])
                 m_start_time = time.perf_counter()
@@ -343,14 +400,16 @@ class IndexTTS:
                                         return_latent=True, clip_inputs=False)
                         gpt_forward_time += time.perf_counter() - m_start_time
                         all_latents.append(latent)
-
+        del all_batch_codes, all_text_tokens, all_sentences
         # bigvgan chunk
         chunk_size = 2
         all_latents = [all_latents[all_idxs.index(i)] for i in range(len(all_latents))]
+        if verbose:
+            print(">> all_latents:", len(all_latents))
+            print(*[l.shape for l in all_latents], sep=", ")
         chunk_latents = [all_latents[i : i + chunk_size] for i in range(0, len(all_latents), chunk_size)]
         chunk_length = len(chunk_latents)
         latent_length = len(all_latents)
-        all_latents = None
 
         # bigvgan chunk decode
         self._set_gr_progress(0.7, "bigvgan decode...")
@@ -370,7 +429,7 @@ class IndexTTS:
 
         # clear cache
         tqdm_progress.close()  # 确保进度条被关闭
-        chunk_latents.clear()
+        del all_latents, chunk_latents
         end_time = time.perf_counter()
         self.torch_empty_cache()
 
@@ -385,7 +444,7 @@ class IndexTTS:
         print(f">> Total fast inference time: {end_time - start_time:.2f} seconds")
         print(f">> Generated audio length: {wav_length:.2f} seconds")
         print(f">> [fast] bigvgan chunk_length: {chunk_length}")
-        print(f">> [fast] batch_num: {all_batch_num} bucket_enable: {bucket_enable}")
+        print(f">> [fast] batch_num: {all_batch_num} bucket_max_size: {bucket_max_size}", f"bucket_count: {bucket_count}" if bucket_max_size > 1 else "")
         print(f">> [fast] RTF: {(end_time - start_time) / wav_length:.4f}")
 
         # save audio
@@ -403,7 +462,7 @@ class IndexTTS:
             return (sampling_rate, wav_data)
 
     # 原始推理模式
-    def infer(self, audio_prompt, text, output_path, verbose=False):
+    def infer(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=120):
         print(">> start inference...")
         self._set_gr_progress(0, "start inference...")
         if verbose:
@@ -431,10 +490,11 @@ class IndexTTS:
 
         auto_conditioning = cond_mel
         text_tokens_list = self.tokenizer.tokenize(text)
-        sentences = self.tokenizer.split_sentences(text_tokens_list)
+        sentences = self.tokenizer.split_sentences(text_tokens_list, max_text_tokens_per_sentence)
         if verbose:
             print("text token count:", len(text_tokens_list))
             print("sentences count:", len(sentences))
+            print("max_text_tokens_per_sentence:", max_text_tokens_per_sentence)
             print(*sentences, sep="\n")
         top_p = 0.8
         top_k = 30
