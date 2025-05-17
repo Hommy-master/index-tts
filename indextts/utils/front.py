@@ -84,7 +84,8 @@ class TextNormalizer:
         # print(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
         # sys.path.append(model_dir)
         import platform
-
+        if self.zh_normalizer is not None and self.en_normalizer is not None:
+            return
         if platform.system() == "Darwin":
             from wetext import Normalizer
 
@@ -355,22 +356,24 @@ class TextTokenizer:
                     sentences.append(current_sentence)
                 else:
                     # 如果当前tokens的长度超过最大限制
-                    if "," in current_sentence or "▁," in current_sentence: 
+                    if not  ("," in split_tokens or "▁," in split_tokens ) and ("," in current_sentence or "▁," in current_sentence): 
                         # 如果当前tokens中有,，则按,分割
                         sub_sentences = TextTokenizer.split_sentences_by_token(
                             current_sentence, [",", "▁,"], max_tokens_per_sentence=max_tokens_per_sentence
                         )
-                    elif "-" in current_sentence:
+                    elif  not  ("-" in split_tokens ) and "-" in current_sentence:
                         # 没有,，则按-分割
                         sub_sentences = TextTokenizer.split_sentences_by_token(
                             current_sentence, ["-"], max_tokens_per_sentence=max_tokens_per_sentence
                         )
                     else:
                         # 按照长度分割
-                        sub_sentences = [
-                            current_sentence[:max_tokens_per_sentence],
-                            current_sentence[max_tokens_per_sentence:],
-                        ]
+                        sub_sentences = []
+                        for j in range(0, len(current_sentence), max_tokens_per_sentence):
+                            if j + max_tokens_per_sentence < len(current_sentence):
+                                sub_sentences.append(current_sentence[j : j + max_tokens_per_sentence])
+                            else:
+                                sub_sentences.append(current_sentence[j:])
                         warnings.warn(
                             f"The tokens length of sentence exceeds limit: {max_tokens_per_sentence}, "
                             f"Tokens in sentence: {current_sentence}."
@@ -448,6 +451,7 @@ if __name__ == "__main__":
         "蒂莫西·唐纳德·库克（英文名：Timothy Donald Cook），通称蒂姆·库克（Tim Cook），美国商业经理、工业工程师和工业开发商，现任苹果公司首席执行官。",
         # 长句子
         "《盗梦空间》是由美国华纳兄弟影片公司出品的电影，由克里斯托弗·诺兰执导并编剧，莱昂纳多·迪卡普里奥、玛丽昂·歌迪亚、约瑟夫·高登-莱维特、艾利奥特·佩吉、汤姆·哈迪等联袂主演，2010年7月16日在美国上映，2010年9月1日在中国内地上映，2020年8月28日在中国内地重映。影片剧情游走于梦境与现实之间，被定义为“发生在意识结构内的当代动作科幻片”，讲述了由莱昂纳多·迪卡普里奥扮演的造梦师，带领特工团队进入他人梦境，从他人的潜意识中盗取机密，并重塑他人梦境的故事。",
+        "清晨拉开窗帘，阳光洒在窗台的Bloomixy花艺礼盒上——薰衣草香薰蜡烛唤醒嗅觉，永生花束折射出晨露般光泽。设计师将“自然绽放美学”融入每个细节：手工陶瓷花瓶可作首饰收纳，香薰精油含依兰依兰舒缓配方。限量款附赠《365天插花灵感手册》，让每个平凡日子都有花开仪式感。\n宴会厅灯光暗下的刹那，Glimmeria星月系列耳坠开始发光——瑞士冷珐琅工艺让蓝宝石如银河流动，钛合金骨架仅3.2g无负重感。设计师秘密：内置微型重力感应器，随步伐产生0.01mm振幅，打造“行走的星光”。七夕限定礼盒含星座定制铭牌，让爱意如星辰永恒闪耀。",
     ]
     # 测试分词器
     tokenizer = TextTokenizer(
