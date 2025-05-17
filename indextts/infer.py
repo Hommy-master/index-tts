@@ -188,38 +188,59 @@ class IndexTTS:
         Sentence data bucketing.
         if ``bucket_max_size=1``, return all sentences in one bucket.
         """
-        outputs: List = []
+        outputs: List[Dict] = []
         for idx, sent in enumerate(sentences):
             outputs.append({"idx": idx, "sent": sent, "len": len(sent)})
        
         if len(outputs) > bucket_max_size:
             # split sentences into buckets by sentence length
-            buckets = []
+            buckets: List[List[Dict]] = []
             factor = 1.5
+            last_bucket = None
             last_bucket_sent_len_median = 0
+
             for sent in sorted(outputs, key=lambda x: x["len"]):
                 current_sent_len = sent["len"]
                 if current_sent_len == 0:
                     print(">> skip empty sentence")
                     continue
-                if last_bucket_sent_len_median == 0 \
-                        or current_sent_len > last_bucket_sent_len_median * factor \
-                        or len(buckets[-1]) > bucket_max_size:
+                if last_bucket is None \
+                        or current_sent_len >= int(last_bucket_sent_len_median * factor) \
+                        or len(last_bucket) >= bucket_max_size:
                     # new bucket
                     buckets.append([sent])
+                    last_bucket = buckets[-1]
                     last_bucket_sent_len_median = current_sent_len
                 else:
                     # current bucket can hold more sentences
-                    buckets[-1].append(sent) # sorted
-                    mid = len(buckets[-1]) // 2
-                    last_bucket_sent_len_median = buckets[-1][mid]["len"]
-            return buckets
+                    last_bucket.append(sent) # sorted
+                    mid = len(last_bucket) // 2
+                    last_bucket_sent_len_median = last_bucket[mid]["len"]
+            last_bucket=None
+            # merge all buckets with size 1
+            out_buckets: List[List[Dict]] = []
+            only_ones: List[Dict] = []
+            for b in buckets:
+                if len(b) == 1:
+                    only_ones.append(b[0])
+                else:
+                    out_buckets.append(b)
+            if len(only_ones) > 0:
+                # merge into previous buckets if possible
+                # print("only_ones:", [(o["idx"], o["len"]) for o in only_ones])
+                for i in range(len(out_buckets)):
+                    b = out_buckets[i]
+                    if len(b) < bucket_max_size:
+                        b.append(only_ones.pop(0))
+                        if len(only_ones) == 0:
+                            break
+                # combined all remaining sized 1 buckets
+                if len(only_ones) > 0:
+                    out_buckets.extend([only_ones[i:i+bucket_max_size] for i in range(0, len(only_ones), bucket_max_size)])
+            return out_buckets
         return [outputs]
 
-
     def pad_tokens_cat(self, tokens: List[torch.Tensor]) -> torch.Tensor:
-        if len(tokens) <= 1:
-            return tokens[-1]
         if self.model_version and self.model_version >= 1.5:
             # 1.5版本以上，直接使用stop_text_token 右侧填充
             # [1, N] -> [N,]
@@ -324,7 +345,9 @@ class IndexTTS:
         all_sentences = self.bucket_sentences(sentences, bucket_max_size=bucket_max_size)
         bucket_count = len(all_sentences)
         if verbose:
-            print(">> sentences bucket_count:", bucket_count,  [len(s) for s in all_sentences])
+            print(">> sentences bucket_count:", bucket_count,
+                  "bucket sizes:", [(len(s), [t["idx"] for t in s]) for s in all_sentences],
+                  "bucket_max_size:", bucket_max_size)
         for sentences in all_sentences:
             temp_tokens: List[torch.Tensor] = []
             all_text_tokens.append(temp_tokens)
@@ -346,9 +369,14 @@ class IndexTTS:
         all_batch_codes = []
         for item_tokens in all_text_tokens:
             batch_num = len(item_tokens)
-            batch_text_tokens = self.pad_tokens_cat(item_tokens)
-            batch_cond_mel_lengths = cond_mel_lengths.expand(batch_num) # [batch_num]
-            batch_auto_conditioning = auto_conditioning.expand(batch_num, -1, -1)  # [batch_num, n_mels, L]
+            if batch_num > 1:
+                batch_text_tokens = self.pad_tokens_cat(item_tokens)
+                batch_cond_mel_lengths = cond_mel_lengths.expand(batch_num) # [batch_num]
+                batch_auto_conditioning = auto_conditioning.expand(batch_num, -1, -1)  # [batch_num, n_mels, L]
+            else:
+                batch_text_tokens = item_tokens[0]
+                batch_cond_mel_lengths = cond_mel_lengths
+                batch_auto_conditioning = auto_conditioning
             all_batch_num += batch_num
 
             # gpt speech
@@ -363,9 +391,9 @@ class IndexTTS:
                                         top_p=top_p,
                                         top_k=top_k,
                                         temperature=temperature,
-                                        num_return_sequences=autoregressive_batch_size,
+                                        num_return_sequences=autoregressive_batch_size if batch_num == 1 else 1,
                                         length_penalty=length_penalty,
-                                        num_beams=num_beams,
+                                        num_beams=num_beams if batch_num == 1 else 1,
                                         repetition_penalty=repetition_penalty,
                                         max_generate_length=max_mel_tokens)
                     all_batch_codes.append(temp_codes)
@@ -406,7 +434,7 @@ class IndexTTS:
         all_latents = [all_latents[all_idxs.index(i)] for i in range(len(all_latents))]
         if verbose:
             print(">> all_latents:", len(all_latents))
-            print(*[l.shape for l in all_latents], sep=", ")
+            print("  latents length:", [l.shape[1] for l in all_latents])
         chunk_latents = [all_latents[i : i + chunk_size] for i in range(0, len(all_latents), chunk_size)]
         chunk_length = len(chunk_latents)
         latent_length = len(all_latents)

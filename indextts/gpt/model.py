@@ -556,7 +556,6 @@ class UnifiedVoice(nn.Module):
         # mel_codes_lengths = torch.div(wav_lengths, self.mel_length_compression, rounding_mode='trunc')
         mel_codes_lengths = torch.ceil(wav_lengths / self.mel_length_compression).long() + 1
         mel_codes = self.set_mel_padding(mel_codes, mel_codes_lengths)
-
         text_inputs = self.set_text_padding(text_inputs, text_lengths)
         text_inputs = F.pad(text_inputs, (0, 1), value=self.stop_text_token)
         mel_codes = F.pad(mel_codes, (0, 1), value=self.stop_mel_token)
@@ -588,14 +587,48 @@ class UnifiedVoice(nn.Module):
         loss_text = F.cross_entropy(text_logits, text_targets.long())
         loss_mel = F.cross_entropy(mel_logits, mel_targets.long())
         return loss_text.mean(), loss_mel.mean(), mel_logits
+    @staticmethod
+    def pad_text_masks(text_masks):
+        """
+        pad masks to [b, t+2]. e.g.:
+        ```
+        [
+            [1, 1, 1, 1, 1] -> [1, 1, 1, 1, 1, 1, 1]
+            [1, 1, 1, 1, 0] -> [1, 1, 1, 1, 1, 1, 0]
+            [0, 0, 0, 0, 0] -> [0, 0, 0, 0, 0, 1, 1]
+            [1, 0, 0, 0, 0] -> [1, 1, 1, 0, 0, 0, 0]
+            [0, 0, 1, 1, 1] -> [0, 0, 1, 1, 1, 1, 1]
+        ]
+        ```
+        text_masks: [b, t]
+        padded_masks: [b, t+2]
+        """
+        b, t = text_masks.size()
+        padded = torch.nn.functional.pad(text_masks, (1, 1), value=0)  # [b, t+2]
+        padded = torch.ones_like(padded, dtype=text_masks.dtype, device=text_masks.device)
 
+        # Find the first and last non-zero index
+        # and set the values before the first index and after the last index to 0
+        nonzero_mask = text_masks != 0
+        has_nonzero = nonzero_mask.any(dim=1)
+        first_idx = nonzero_mask.float().argmax(dim=1)
+        rev_mask = nonzero_mask.flip(dims=[1])
+        last_idx = t - rev_mask.float().argmax(dim=1)
+        first_idx = first_idx.reshape(b, 1)
+        last_idx = last_idx.reshape(b, 1)
+        col_idx = torch.arange(t+2, device=text_masks.device).unsqueeze(0).expand(b, -1)  # [b, t_2]
+        padded[col_idx < first_idx] = 0
+        padded[col_idx > last_idx+1] = 0
+        # all zeros
+        padded[~has_nonzero, :-2] = 0
+        return padded
     def inference_speech(self, speech_conditioning_latent, text_inputs, cond_mel_lengths=None, input_tokens=None, num_return_sequences=1,
                          max_generate_length=None, typical_sampling=False, typical_mass=.9, **hf_generate_kwargs):
 
         text_masks = ((text_inputs != self.stop_text_token) & (text_inputs != self.start_text_token)).long()
         text_inputs = F.pad(text_inputs, (0, 1), value=self.stop_text_token)
         text_inputs, _ = self.build_aligned_inputs_and_targets(text_inputs, self.start_text_token, self.stop_text_token)
-        text_masks = F.pad(text_masks, (1, 1), value=1) # (-1, +1)  
+        text_masks = UnifiedVoice.pad_text_masks(text_masks) # [b, t+2]
         text_emb = self.text_embedding(text_inputs) + self.text_pos_embedding(text_inputs)
         speech_conditioning_latent = self.get_conditioning(speech_conditioning_latent, cond_mel_lengths)
         conds = speech_conditioning_latent
