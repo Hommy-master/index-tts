@@ -273,7 +273,7 @@ class IndexTTS:
             self.gr_progress(value, desc=desc)
 
     # 快速推理：对于“多句长文本”，可实现至少 2~10 倍以上的速度提升~ （First modified by sunnyboxs 2025-04-16）
-    def infer_fast(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=100, sentences_bucket_max_size=4, **sample_kwargs):
+    def infer_fast(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=100, sentences_bucket_max_size=4, **generation_kwargs):
         """
         Args:
             ``max_text_tokens_per_sentence``: 分句的最大token数，默认``100``，可以根据GPU硬件情况调整
@@ -321,15 +321,15 @@ class IndexTTS:
             print("   splited sentences count:", len(sentences))
             print("   max_text_tokens_per_sentence:", max_text_tokens_per_sentence)
             print(*sentences, sep="\n")
-        do_sample = sample_kwargs.pop("do_sample", True)
-        top_p = sample_kwargs.pop("top_p", 0.8)
-        top_k = sample_kwargs.pop("top_k", 30)
-        temperature = sample_kwargs.pop("temperature", 1.0)
+        do_sample = generation_kwargs.pop("do_sample", True)
+        top_p = generation_kwargs.pop("top_p", 0.8)
+        top_k = generation_kwargs.pop("top_k", 30)
+        temperature = generation_kwargs.pop("temperature", 1.0)
         autoregressive_batch_size = 1
-        length_penalty = sample_kwargs.pop("length_penalty", 0.0)
-        num_beams = sample_kwargs.pop("num_beams", 3)
-        repetition_penalty = sample_kwargs.pop("repetition_penalty", 10.0)
-        max_mel_tokens = sample_kwargs.pop("max_mel_tokens", 600)
+        length_penalty = generation_kwargs.pop("length_penalty", 0.0)
+        num_beams = generation_kwargs.pop("num_beams", 3)
+        repetition_penalty = generation_kwargs.pop("repetition_penalty", 10.0)
+        max_mel_tokens = generation_kwargs.pop("max_mel_tokens", 600)
         sampling_rate = 24000
         # lang = "EN"
         # lang = "ZH"
@@ -391,7 +391,8 @@ class IndexTTS:
                                         length_penalty=length_penalty,
                                         num_beams=num_beams,
                                         repetition_penalty=repetition_penalty,
-                                        max_generate_length=max_mel_tokens)
+                                        max_generate_length=max_mel_tokens,
+                                        **generation_kwargs)
                     all_batch_codes.append(temp_codes)
             gpt_gen_time += time.perf_counter() - m_start_time
 
@@ -494,7 +495,7 @@ class IndexTTS:
             return (sampling_rate, wav_data)
 
     # 原始推理模式
-    def infer(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=120, **sample_kwargs):
+    def infer(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=120, **generation_kwargs):
         print(">> start inference...")
         self._set_gr_progress(0, "start inference...")
         if verbose:
@@ -529,15 +530,15 @@ class IndexTTS:
             print("sentences count:", len(sentences))
             print("max_text_tokens_per_sentence:", max_text_tokens_per_sentence)
             print(*sentences, sep="\n")
-        do_sample = sample_kwargs.pop("do_sample", True)
-        top_p = sample_kwargs.pop("top_p", 0.8)
-        top_k = sample_kwargs.pop("top_k", 30)
-        temperature = sample_kwargs.pop("temperature", 1.0)
+        do_sample = generation_kwargs.pop("do_sample", True)
+        top_p = generation_kwargs.pop("top_p", 0.8)
+        top_k = generation_kwargs.pop("top_k", 30)
+        temperature = generation_kwargs.pop("temperature", 1.0)
         autoregressive_batch_size = 1
-        length_penalty = sample_kwargs.pop("length_penalty", 0.0)
-        num_beams = sample_kwargs.pop("num_beams", 3)
-        repetition_penalty = sample_kwargs.pop("repetition_penalty", 10.0)
-        max_mel_tokens = sample_kwargs.pop("max_mel_tokens", 600)
+        length_penalty = generation_kwargs.pop("length_penalty", 0.0)
+        num_beams = generation_kwargs.pop("num_beams", 3)
+        repetition_penalty = generation_kwargs.pop("repetition_penalty", 10.0)
+        max_mel_tokens = generation_kwargs.pop("max_mel_tokens", 600)
         sampling_rate = 24000
         # lang = "EN"
         # lang = "ZH"
@@ -579,7 +580,8 @@ class IndexTTS:
                                                         length_penalty=length_penalty,
                                                         num_beams=num_beams,
                                                         repetition_penalty=repetition_penalty,
-                                                        max_generate_length=max_mel_tokens)
+                                                        max_generate_length=max_mel_tokens,
+                                                        **generation_kwargs)
                 gpt_gen_time += time.perf_counter() - m_start_time
                 if not has_warned and (codes[:, -1] != self.stop_mel_token).any():
                     warnings.warn(
