@@ -242,7 +242,7 @@ class IndexTTS:
 
     def pad_tokens_cat(self, tokens: List[torch.Tensor]) -> torch.Tensor:
         if self.model_version and self.model_version >= 1.5:
-            # 1.5版本以上，直接使用stop_text_token 右侧填充
+            # 1.5版本以上，直接使用stop_text_token 右侧填充，填充到最大长度
             # [1, N] -> [N,]
             tokens = [t.squeeze(0) for t in tokens]
             return pad_sequence(tokens, batch_first=True, padding_value=self.cfg.gpt.stop_text_token, padding_side="right")
@@ -273,7 +273,7 @@ class IndexTTS:
             self.gr_progress(value, desc=desc)
 
     # 快速推理：对于“多句长文本”，可实现至少 2~10 倍以上的速度提升~ （First modified by sunnyboxs 2025-04-16）
-    def infer_fast(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=100, sentences_bucket_max_size=4):
+    def infer_fast(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=100, sentences_bucket_max_size=4, **sample_kwargs):
         """
         Args:
             ``max_text_tokens_per_sentence``: 分句的最大token数，默认``100``，可以根据GPU硬件情况调整
@@ -321,15 +321,15 @@ class IndexTTS:
             print("   splited sentences count:", len(sentences))
             print("   max_text_tokens_per_sentence:", max_text_tokens_per_sentence)
             print(*sentences, sep="\n")
-
-        top_p = 0.8
-        top_k = 30
-        temperature = 1.0
+        do_sample = sample_kwargs.pop("do_sample", True)
+        top_p = sample_kwargs.pop("top_p", 0.8)
+        top_k = sample_kwargs.pop("top_k", 30)
+        temperature = sample_kwargs.pop("temperature", 1.0)
         autoregressive_batch_size = 1
-        length_penalty = 0.0
-        num_beams = 3
-        repetition_penalty = 10.0
-        max_mel_tokens = 600
+        length_penalty = sample_kwargs.pop("length_penalty", 0.0)
+        num_beams = sample_kwargs.pop("num_beams", 3)
+        repetition_penalty = sample_kwargs.pop("repetition_penalty", 10.0)
+        max_mel_tokens = sample_kwargs.pop("max_mel_tokens", 600)
         sampling_rate = 24000
         # lang = "EN"
         # lang = "ZH"
@@ -365,35 +365,31 @@ class IndexTTS:
         
             
         # Sequential processing of bucketing data
-        all_batch_num = 0
+        all_batch_num = sum(len(s) for s in all_sentences)
         all_batch_codes = []
+        processed_num = 0
         for item_tokens in all_text_tokens:
             batch_num = len(item_tokens)
             if batch_num > 1:
                 batch_text_tokens = self.pad_tokens_cat(item_tokens)
-                batch_cond_mel_lengths = cond_mel_lengths.expand(batch_num) # [batch_num]
-                batch_auto_conditioning = auto_conditioning.expand(batch_num, -1, -1)  # [batch_num, n_mels, L]
             else:
-                batch_text_tokens = item_tokens[0]
-                batch_cond_mel_lengths = cond_mel_lengths
-                batch_auto_conditioning = auto_conditioning
-            all_batch_num += batch_num
-
+                batch_text_tokens = torch.nn.functional.pad(item_tokens[0], (8, 0), value=self.cfg.gpt.start_text_token)
+            processed_num += batch_num
             # gpt speech
-            self._set_gr_progress(0.2, "gpt inference speech...")
+            self._set_gr_progress(0.2 + 0.3 * processed_num/all_batch_num, f"gpt inference speech... {processed_num}/{all_batch_num}")
             m_start_time = time.perf_counter()
             with torch.no_grad():
                 with torch.amp.autocast(batch_text_tokens.device.type, enabled=self.dtype is not None, dtype=self.dtype):
-                    temp_codes = self.gpt.inference_speech(batch_auto_conditioning, batch_text_tokens,
-                                        cond_mel_lengths=batch_cond_mel_lengths,
+                    temp_codes = self.gpt.inference_speech(auto_conditioning, batch_text_tokens,
+                                        cond_mel_lengths=cond_mel_lengths,
                                         # text_lengths=text_len,
-                                        do_sample=True,
+                                        do_sample=do_sample,
                                         top_p=top_p,
                                         top_k=top_k,
                                         temperature=temperature,
-                                        num_return_sequences=autoregressive_batch_size if batch_num == 1 else 1,
+                                        num_return_sequences=autoregressive_batch_size,
                                         length_penalty=length_penalty,
-                                        num_beams=num_beams if batch_num == 1 else 1,
+                                        num_beams=num_beams,
                                         repetition_penalty=repetition_penalty,
                                         max_generate_length=max_mel_tokens)
                     all_batch_codes.append(temp_codes)
@@ -490,7 +486,7 @@ class IndexTTS:
             return (sampling_rate, wav_data)
 
     # 原始推理模式
-    def infer(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=120):
+    def infer(self, audio_prompt, text, output_path, verbose=False, max_text_tokens_per_sentence=120, **sample_kwargs):
         print(">> start inference...")
         self._set_gr_progress(0, "start inference...")
         if verbose:
@@ -516,6 +512,7 @@ class IndexTTS:
             cond_mel_frame = cond_mel.shape[-1]
             pass
 
+        self._set_gr_progress(0.1, "text processing...")
         auto_conditioning = cond_mel
         text_tokens_list = self.tokenizer.tokenize(text)
         sentences = self.tokenizer.split_sentences(text_tokens_list, max_text_tokens_per_sentence)
@@ -524,14 +521,15 @@ class IndexTTS:
             print("sentences count:", len(sentences))
             print("max_text_tokens_per_sentence:", max_text_tokens_per_sentence)
             print(*sentences, sep="\n")
-        top_p = 0.8
-        top_k = 30
-        temperature = 1.0
+        do_sample = sample_kwargs.pop("do_sample", True)
+        top_p = sample_kwargs.pop("top_p", 0.8)
+        top_k = sample_kwargs.pop("top_k", 30)
+        temperature = sample_kwargs.pop("temperature", 1.0)
         autoregressive_batch_size = 1
-        length_penalty = 0.0
-        num_beams = 3
-        repetition_penalty = 10.0
-        max_mel_tokens = 600
+        length_penalty = sample_kwargs.pop("length_penalty", 0.0)
+        num_beams = sample_kwargs.pop("num_beams", 3)
+        repetition_penalty = sample_kwargs.pop("repetition_penalty", 10.0)
+        max_mel_tokens = sample_kwargs.pop("max_mel_tokens", 600)
         sampling_rate = 24000
         # lang = "EN"
         # lang = "ZH"
@@ -539,7 +537,7 @@ class IndexTTS:
         gpt_gen_time = 0
         gpt_forward_time = 0
         bigvgan_time = 0
-
+        progress = 0
         for sent in sentences:
             text_tokens = self.tokenizer.convert_tokens_to_ids(sent)
             text_tokens = torch.tensor(text_tokens, dtype=torch.int32, device=self.device).unsqueeze(0)
@@ -555,7 +553,8 @@ class IndexTTS:
 
             # text_len = torch.IntTensor([text_tokens.size(1)], device=text_tokens.device)
             # print(text_len)
-
+            progress += 1
+            self._set_gr_progress(0.2 + 0.4 * (progress-1) / len(sentences), f"gpt inference latent... {progress}/{len(sentences)}")
             m_start_time = time.perf_counter()
             with torch.no_grad():
                 with torch.amp.autocast(text_tokens.device.type, enabled=self.dtype is not None, dtype=self.dtype):
@@ -563,7 +562,7 @@ class IndexTTS:
                                                         cond_mel_lengths=torch.tensor([auto_conditioning.shape[-1]],
                                                                                       device=text_tokens.device),
                                                         # text_lengths=text_len,
-                                                        do_sample=True,
+                                                        do_sample=do_sample,
                                                         top_p=top_p,
                                                         top_k=top_k,
                                                         temperature=temperature,
@@ -587,7 +586,7 @@ class IndexTTS:
                     print(codes, type(codes))
                     print(f"fix codes shape: {codes.shape}, codes type: {codes.dtype}")
                     print(f"code len: {code_lens}")
-
+                self._set_gr_progress(0.2 + 0.4 * progress / len(sentences), f"gpt inference speech... {progress}/{len(sentences)}")
                 m_start_time = time.perf_counter()
                 # latent, text_lens_out, code_lens_out = \
                 with torch.amp.autocast(text_tokens.device.type, enabled=self.dtype is not None, dtype=self.dtype):
@@ -605,11 +604,12 @@ class IndexTTS:
                     wav = wav.squeeze(1)
 
                 wav = torch.clamp(32767 * wav, -32767.0, 32767.0)
-                print(f"wav shape: {wav.shape}", "min:", wav.min(), "max:", wav.max())
+                if verbose:
+                    print(f"wav shape: {wav.shape}", "min:", wav.min(), "max:", wav.max())
                 # wavs.append(wav[:, :-512])
                 wavs.append(wav.cpu())  # to cpu before saving
         end_time = time.perf_counter()
-
+        self._set_gr_progress(0.9, "save audio...")
         wav = torch.cat(wavs, dim=1)
         wav_length = wav.shape[-1] / sampling_rate
         print(f">> Reference audio length: {cond_mel_frame * 256 / sampling_rate:.2f} seconds")
