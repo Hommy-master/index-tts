@@ -149,6 +149,7 @@ wget https://huggingface.co/IndexTeam/IndexTTS-1.5/resolve/main/bpe.model -P che
 wget https://huggingface.co/IndexTeam/IndexTTS-1.5/resolve/main/dvae.pth -P checkpoints
 wget https://huggingface.co/IndexTeam/IndexTTS-1.5/resolve/main/gpt.pth -P checkpoints
 wget https://huggingface.co/IndexTeam/IndexTTS-1.5/resolve/main/unigram_12000.vocab -P checkpoints
+wget https://huggingface.co/IndexTeam/IndexTTS-1.5/resolve/main/config.yaml -P checkpoints
 ```
 
 4. Run test script:
@@ -180,6 +181,9 @@ indextts --help
 ```bash
 pip install -e ".[webui]"
 python webui.py
+
+# use another model version:
+python webui.py --model_dir IndexTTS-1.5
 ```
 Open your browser and visit `http://127.0.0.1:7860` to see the demo.
 
