@@ -373,7 +373,7 @@ class IndexTTS:
             if batch_num > 1:
                 batch_text_tokens = self.pad_tokens_cat(item_tokens)
             else:
-                batch_text_tokens = torch.nn.functional.pad(item_tokens[0], (8, 0), value=self.cfg.gpt.start_text_token)
+                batch_text_tokens = item_tokens[0]
             processed_num += batch_num
             # gpt speech
             self._set_gr_progress(0.2 + 0.3 * processed_num/all_batch_num, f"gpt inference speech... {processed_num}/{all_batch_num}")
