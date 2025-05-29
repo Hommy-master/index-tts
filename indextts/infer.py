@@ -102,8 +102,9 @@ class IndexTTS:
                 print(">> Preload custom CUDA kernel for BigVGAN", anti_alias_activation_cuda)
             except Exception as e:
                 print(">> Failed to load custom CUDA kernel for BigVGAN. Falling back to torch.", e, file=sys.stderr)
+                print(" Reinstall with `pip install -e . --no-deps --no-build-isolation` to prebuild `anti_alias_activation_cuda` kernel.", file=sys.stderr)
                 print(
-                    "See more details: https://github.com/index-tts/index-tts/issues/164#issuecomment-2903453206"
+                    "See more details: https://github.com/index-tts/index-tts/issues/164#issuecomment-2903453206", file=sys.stderr
                 )
                 self.use_cuda_kernel = False
         self.bigvgan = Generator(self.cfg.bigvgan, use_cuda_kernel=self.use_cuda_kernel)
