@@ -35,9 +35,9 @@
     <img src='https://img.shields.io/badge/HuggingFace-Model-blue?logo=huggingface' />
   </a>
   <br/>
-  <!--a href='https://modelscope.cn/studios/IndexTeam/IndexTTS-Demo'>
+  <a href='https://modelscope.cn/studios/IndexTeam/IndexTTS-2-Demo'>
     <img src='https://img.shields.io/badge/ModelScope-Demo-purple?logo=modelscope'/>
-  </a-->
+  </>
   <a href='https://modelscope.cn/models/IndexTeam/IndexTTS-2'>
     <img src='https://img.shields.io/badge/ModelScope-Model-purple?logo=modelscope'/>
   </a>
