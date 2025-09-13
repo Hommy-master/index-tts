@@ -317,7 +317,7 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
                 segments_preview: gr.update(value=df),
             }
 
-    def on_method_select(emo_control_method):
+    def on_method_change(emo_control_method):
         if emo_control_method == 1:  # emotion reference audio
             return (gr.update(visible=True),
                     gr.update(visible=False),
@@ -355,7 +355,7 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
         else:
             return gr.update(choices=EMO_CHOICES_BASE, value=EMO_CHOICES_BASE[0]), gr.update(visible=False),gr.update(value=example_cases[:-2])
 
-    emo_control_method.select(on_method_select,
+    emo_control_method.change(on_method_change,
         inputs=[emo_control_method],
         outputs=[emotion_reference_group,
                  emotion_randomize_group,
