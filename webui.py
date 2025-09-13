@@ -142,8 +142,6 @@ def gen_single(emo_control_method,prompt, text,
     if emo_control_method == 0:  # emotion from speaker
         emo_ref_path = None  # remove external reference audio
     if emo_control_method == 1:  # emotion from reference audio
-        # normalize emo_alpha for better user experience
-        emo_weight = emo_weight * 0.8
         pass
     if emo_control_method == 2:  # emotion from custom vectors
         vec = [vec1, vec2, vec3, vec4, vec5, vec6, vec7, vec8]
@@ -233,7 +231,7 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
 
 
         with gr.Row(visible=False) as emo_weight_group:
-            emo_weight = gr.Slider(label=i18n("情感权重"), minimum=0.0, maximum=1.0, value=0.8, step=0.01)
+            emo_weight = gr.Slider(label=i18n("情感权重"), minimum=0.0, maximum=1.0, value=0.65, step=0.01)
 
         with gr.Accordion(i18n("高级生成参数设置"), open=False,visible=False) as advanced_settings_group:
             with gr.Row():
