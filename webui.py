@@ -223,7 +223,7 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
         with gr.Row(visible=False) as emo_weight_group:
             emo_weight = gr.Slider(label=i18n("情感权重"), minimum=0.0, maximum=1.0, value=0.65, step=0.01)
 
-        with gr.Accordion(i18n("高级生成参数设置"), open=False,visible=False) as advanced_settings_group:
+        with gr.Accordion(i18n("高级生成参数设置"), open=False, visible=True) as advanced_settings_group:
             with gr.Row():
                 with gr.Column(scale=1):
                     gr.Markdown(f"**{i18n('GPT2 采样设置')}** _{i18n('参数会影响音频多样性和生成速度详见')} [Generation strategies](https://huggingface.co/docs/transformers/main/en/generation_strategies)._")
@@ -332,9 +332,9 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
         # 切换情感控制选项
         # 第三个返回值实际没有起作用
         if is_exp:
-            return gr.update(choices=EMO_CHOICES_EXPERIMENTAL, value=EMO_CHOICES_EXPERIMENTAL[0]), gr.update(visible=True),gr.update(value=example_cases)
+            return gr.update(choices=EMO_CHOICES_EXPERIMENTAL, value=EMO_CHOICES_EXPERIMENTAL[0]), gr.update(value=example_cases)
         else:
-            return gr.update(choices=EMO_CHOICES_BASE, value=EMO_CHOICES_BASE[0]), gr.update(visible=False),gr.update(value=example_cases[:-2])
+            return gr.update(choices=EMO_CHOICES_BASE, value=EMO_CHOICES_BASE[0]), gr.update(value=example_cases[:-2])
 
     emo_control_method.change(on_method_change,
         inputs=[emo_control_method],
@@ -354,7 +354,7 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
     experimental_checkbox.change(
         on_experimental_change,
         inputs=[experimental_checkbox],
-        outputs=[emo_control_method, advanced_settings_group,example_table.dataset]  # 高级参数Accordion
+        outputs=[emo_control_method, example_table.dataset]  # 高级参数Accordion
     )
 
     max_text_tokens_per_segment.change(
