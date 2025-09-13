@@ -6,8 +6,6 @@ import time
 
 import warnings
 
-import numpy as np
-
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
 
@@ -104,14 +102,6 @@ with open("examples/cases.jsonl", "r", encoding="utf-8") as f:
                              example.get("emo_text") is not None]
                              )
 
-def normalize_emo_vec(emo_vec):
-    # emotion factors for better user experience
-    k_vec = [0.75,0.70,0.80,0.80,0.75,0.75,0.55,0.45]
-    tmp = np.array(k_vec) * np.array(emo_vec)
-    if np.sum(tmp) > 0.8:
-        tmp = tmp * 0.8/ np.sum(tmp)
-    return tmp.tolist()
-
 def gen_single(emo_control_method,prompt, text,
                emo_ref_path, emo_weight,
                vec1, vec2, vec3, vec4, vec5, vec6, vec7, vec8,
@@ -145,7 +135,7 @@ def gen_single(emo_control_method,prompt, text,
         pass
     if emo_control_method == 2:  # emotion from custom vectors
         vec = [vec1, vec2, vec3, vec4, vec5, vec6, vec7, vec8]
-        vec = normalize_emo_vec(vec)
+        vec = tts.normalize_emo_vec(vec, apply_bias=True)
     else:
         # don't use the emotion vector inputs for the other modes
         vec = None
