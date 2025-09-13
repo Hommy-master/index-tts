@@ -260,10 +260,14 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
                 length_penalty, num_beams, repetition_penalty, max_mel_tokens,
                 # typical_sampling, typical_mass,
             ]
-        
-        if len(example_cases) > 2:
+
+        if len(example_cases) > 0:
             example_table = gr.Examples(
-                examples=example_cases[:-2],
+                examples=(
+                    example_cases[:-2]
+                    if len(example_cases) > 2
+                    else example_cases
+                ),
                 examples_per_page=20,
                 inputs=[prompt_audio,
                         emo_control_method,
@@ -271,19 +275,8 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
                         emo_upload,
                         emo_weight,
                         emo_text,
-                        vec1,vec2,vec3,vec4,vec5,vec6,vec7,vec8,experimental_checkbox]
-            )
-        elif len(example_cases) > 0:
-            example_table = gr.Examples(
-                examples=example_cases,
-                examples_per_page=20,
-                inputs=[prompt_audio,
-                        emo_control_method,
-                        input_text_single,
-                        emo_upload,
-                        emo_weight,
-                        emo_text,
-                        vec1, vec2, vec3, vec4, vec5, vec6, vec7, vec8, experimental_checkbox]
+                        vec1, vec2, vec3, vec4, vec5, vec6, vec7, vec8,
+                        experimental_checkbox]
             )
 
     def on_input_text_change(text, max_text_tokens_per_segment):
