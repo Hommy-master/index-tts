@@ -311,7 +311,7 @@ with gr.Blocks(title="IndexTTS Demo") as demo:
                     gr.update(visible=True),
                     gr.update(visible=True),
                     gr.update(visible=False),
-                    gr.update(visible=False)
+                    gr.update(visible=True)
                     )
         elif emo_control_method == 3:  # emotion text description
             return (gr.update(visible=False),
