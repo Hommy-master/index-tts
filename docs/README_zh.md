@@ -365,7 +365,7 @@ tts.infer(voice, text, 'gen.wav')
  - **Yuelang Sun** – 技术贡献者；在音频录制与数据采集方面提供专业支持，保障模型训练与评测所需的高质量数据。
 
 ### 社区贡献者
- - **Yihuang Liang** – 参与社区运营、文档撰写与项目推广，帮助IndexTTS项目触达更广泛的用户。
+ - **Yihuang Liang** – 社区建设者；主导社区运营、项目推广与外部合作，帮助 IndexTTS 项目扩大影响力并提升用户参与度。
 
 ### 技术指导
  - **Huyang Sun** – 对IndexTTS项目给予了大力支持，确保了项目的战略方向与资源保障。

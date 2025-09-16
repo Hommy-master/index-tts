@@ -436,7 +436,7 @@ We sincerely thank colleagues from different roles at Bilibili, whose combined e
  - **Yuelang Sun** – Supporting contributor; provided professional support in audio recording and data collection, ensuring high-quality data for model training and evaluation.
 
 ### Community Contributors
- - **Yihuang Liang** - Engaged in community operations, documentation writing, and project promotion, helping IndexTTS reach a wider audience.
+ - **Yihuang Liang** - Community builder; led community operations, project promotion, and external collaboration, helping IndexTTS expand its reach and engagement.
 
 ### Technical Guidance
  - **Huyang Sun** - Provided strong support for the IndexTTS project, ensuring strategic alignment and resource backing.
