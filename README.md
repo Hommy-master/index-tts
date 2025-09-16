@@ -416,11 +416,7 @@ or visit the IndexTTS1 repository at <a href="https://github.com/index-tts/index
 7. [seed-vc](https://github.com/Plachtaa/seed-vc)
 
 ## Contributors in Bilibili
-We sincerely thank colleagues from different levels at Bilibili, whose combined efforts made the IndexTTS series possible.
-
-### Technical Guidance
- - **Huyang Sun** - Provided strong support for the IndexTTS project, ensuring strategic alignment and resource backing.
- - **Bin Xia** - Contributed to the review, optimization, and follow-up of technical solutions, focusing on ensuring model effectiveness.
+We sincerely thank colleagues from different roles at Bilibili, whose combined efforts made the IndexTTS series possible.
 
 ### Core Authors
  - **Siyi Zhou** – Core author; in IndexTTS2, led model architecture design and training pipeline optimization, focusing on key features such as multilingual and emotional synthesis.
@@ -435,10 +431,16 @@ We sincerely thank colleagues from different levels at Bilibili, whose combined 
 ### Technical Contributors
  - **Yining Wang** - Core contributor; contributed to open-source code implementation and maintenance, supporting feature adaptation and community release.
  - **Yong Wu** - Supporting contributor; worked on data processing and experimental support, ensuring data quality and efficiency for model training and iteration.
+ - **Yaqin Huang** – Supporting contributor; contributed to systematic model evaluation and effect tracking, providing feedback to support iterative improvements.
+ - **Yuelang Sun** – Recording engineer; provided professional support in audio recording and data collection, ensuring high-quality data for model training and evaluation.
 
 ### Community Contributors
  - **Yihuang Liang** - Engaged in community operations, documentation writing, and project promotion, helping IndexTTS reach a wider audience.
  - **Yunhan Xu** – Deeply familiar with model usage, provided key feedback on improving usability and making the model smoother to apply in practice.
+
+### Technical Guidance
+ - **Huyang Sun** - Provided strong support for the IndexTTS project, ensuring strategic alignment and resource backing.
+ - **Bin Xia** - Contributed to the review, optimization, and follow-up of technical solutions, focusing on ensuring model effectiveness.
 
 
 ## 📚 Citation
