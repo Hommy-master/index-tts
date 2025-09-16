@@ -363,6 +363,18 @@ emo_text = "你吓死我了！你是鬼吗？"
 tts.infer(spk_audio_prompt='examples/voice_12.wav', text=text, output_path="gen.wav", emo_alpha=0.6, use_emo_text=True, emo_text=emo_text, use_random=False, verbose=True)
 ```
 
+> [!TIP]
+> **Pinyin Usage Notes:**
+> 
+> IndexTTS2 still supports mixed modeling of Chinese characters and Pinyin.
+> When you need precise pronunciation control, please provide text with specific Pinyin annotations to activate the Pinyin control feature.
+> Note that Pinyin control does not work for every possible consonant–vowel combination; only valid Chinese Pinyin cases are supported.
+> For the full list of valid entries, please refer to `checkpoints/pinyin.vocab.`
+>
+> Example:
+> ```
+> 之前你做DE5很好，所以这一次也DEI3做DE2很好才XING2，如果这次目标完成得不错的话，我们就直接打DI1去银行取钱。
+> ```
 
 ### Legacy: IndexTTS1 User Guide
 

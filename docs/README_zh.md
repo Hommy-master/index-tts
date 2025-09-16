@@ -294,6 +294,19 @@ emo_text = "你吓死我了！你是鬼吗？"
 tts.infer(spk_audio_prompt='examples/voice_12.wav', text=text, output_path="gen.wav", emo_alpha=0.6, use_emo_text=True, emo_text=emo_text, use_random=False, verbose=True)
 ```
 
+> [!TIP]
+> **拼音使用注意事项:**
+> 
+> IndexTTS2依然支持中文字符与拼音混合建模。
+> 在使用时，如果需要精确的发音控制，请输入包含特定拼音标注的文本来触发拼音控制功能。
+> 需要注意的是：拼音控制并不是对所有声母韵母（辅音、元音）组合都生效，系统仅保留中文合法拼音的发音。
+> 具体合法情况可参考项目中的`checkpoints/pinyin.vocab`文件。
+>
+> 参考样例:
+> ```
+> 之前你做DE5很好，所以这一次也DEI3做DE2很好才XING2，如果这次目标完成得不错的话，我们就直接打DI1去银行取钱。
+> ```
+
 ### 旧版IndexTTS1使用指南
 
 如果需要使用旧的IndexTTS1.5模型，可以import旧模块：
