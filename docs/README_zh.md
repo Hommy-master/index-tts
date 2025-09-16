@@ -77,6 +77,14 @@ Discord：https://discord.gg/uT32E7KDmy  \
 欢迎加入我们的社区！🌏  \
 欢迎大家交流讨论！
 
+> [!CAUTION]
+> 官方声明
+> 感谢大家对bilibili indextts项目的支持与关注！
+> 请注意，目前由核心团队直接维护的**官方渠道仅有**: [https://github.com/index-tts/index-tts](https://github.com/index-tts/index-tts).
+> ***其他任何网站或服务均非官方提供***，我们对其内容及安全性、准确性和及时性不作任何担保。
+> 为了保障您的权益，建议通过上述官方渠道获取bilibili indextts项目的最新进展与更新。
+
+
 ## 📣 更新日志
 
 - `2025/09/08` 🔥🔥🔥  IndexTTS-2全球发布！

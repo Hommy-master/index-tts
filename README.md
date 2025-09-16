@@ -82,6 +82,13 @@ Email：indexspeech@bilibili.com  \
 You are welcome to join our community! 🌏  \
 欢迎大家来交流讨论！
 
+> [!CAUTION]
+> Official Statement
+> Thank you for your support of the bilibili indextts project!
+> Please note that the **only official channel** maintained by the core team is: [https://github.com/index-tts/index-tts](https://github.com/index-tts/index-tts).
+> ***Any other websites or services are not official***, and we cannot guarantee their security, accuracy, or timeliness.
+> For the latest updates, please always refer to this official repository.
+
 
 ## 📣 Updates
 
