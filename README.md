@@ -369,7 +369,7 @@ tts.infer(spk_audio_prompt='examples/voice_12.wav', text=text, output_path="gen.
 > IndexTTS2 still supports mixed modeling of Chinese characters and Pinyin.
 > When you need precise pronunciation control, please provide text with specific Pinyin annotations to activate the Pinyin control feature.
 > Note that Pinyin control does not work for every possible consonant–vowel combination; only valid Chinese Pinyin cases are supported.
-> For the full list of valid entries, please refer to `checkpoints/pinyin.vocab.`
+> For the full list of valid entries, please refer to `checkpoints/pinyin.vocab`.
 >
 > Example:
 > ```
