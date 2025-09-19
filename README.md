@@ -214,7 +214,7 @@ uv sync --all-extras --default-index "https://mirrors.tuna.tsinghua.edu.cn/pypi/
 Download via `huggingface-cli`:
 
 ```bash
-uv tool install "huggingface_hub[cli]"
+uv tool install "huggingface-hub[cli,hf_xet]"
 
 hf download IndexTeam/IndexTTS-2 --local-dir=checkpoints
 ```
