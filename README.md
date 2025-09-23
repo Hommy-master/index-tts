@@ -426,8 +426,8 @@ or visit the IndexTTS1 repository at <a href="https://github.com/index-tts/index
 We sincerely thank colleagues from different roles at Bilibili, whose combined efforts made the IndexTTS series possible.
 
 ### Core Authors
+ - **Wei Deng** - Core author; Initiated the IndexTTS project, led the development of the IndexTTS1 data pipeline, model architecture design and training, as well as iterative optimization of the IndexTTS series of models, focusing on fundamental capability building and performance optimization.
  - **Siyi Zhou** – Core author; in IndexTTS2, led model architecture design and training pipeline optimization, focusing on key features such as multilingual and emotional synthesis.
- - **Wei Deng** - Core author; in IndexTTS1, led model architecture design and training pipeline, focusing on fundamental capability building and performance optimization.
  - **Jingchen Shu** - Core author; worked on overall architecture design, cross-lingual modeling solutions, and training strategy optimization, driving model iteration.
  - **Xun Zhou** - Core author; worked on cross-lingual data processing and experiments, explored multilingual training strategies, and contributed to audio quality improvement and stability evaluation.
  - **Jinchao Wang** - Core author; worked on model development and deployment, building the inference framework and supporting system integration.
