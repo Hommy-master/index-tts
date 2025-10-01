@@ -351,13 +351,16 @@ class IndexTTS2:
                 verbose, max_text_tokens_per_segment, stream_return, more_segment_before, **generation_kwargs
             )
         else:
-            return list(self.infer_generator(
-                spk_audio_prompt, text, output_path,
-                emo_audio_prompt, emo_alpha,
-                emo_vector,
-                use_emo_text, emo_text, use_random, interval_silence,
-                verbose, max_text_tokens_per_segment, stream_return, more_segment_before, **generation_kwargs
-            ))[0]
+            try:
+                return list(self.infer_generator(
+                    spk_audio_prompt, text, output_path,
+                    emo_audio_prompt, emo_alpha,
+                    emo_vector,
+                    use_emo_text, emo_text, use_random, interval_silence,
+                    verbose, max_text_tokens_per_segment, stream_return, more_segment_before, **generation_kwargs
+                ))[0]
+            except IndexError:
+                return None
 
     def infer_generator(self, spk_audio_prompt, text, output_path,
               emo_audio_prompt=None, emo_alpha=1.0,
@@ -677,14 +680,14 @@ class IndexTTS2:
             print(">> wav file saved to:", output_path)
             if stream_return:
                 return None
-            return output_path
+            yield output_path
         else:
             if stream_return:
                 return None
             # 返回以符合Gradio的格式要求
             wav_data = wav.type(torch.int16)
             wav_data = wav_data.numpy().T
-            return (sampling_rate, wav_data)
+            yield (sampling_rate, wav_data)
 
 
 def find_most_similar_cosine(query_vector, matrix):
