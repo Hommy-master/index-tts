@@ -41,8 +41,9 @@ RUN pip install uv
 
 WORKDIR ${WORKDIR}
 
-# Copy dependency files first (for better Docker layer caching)
+# Copy dependency files and source package (hatchling needs indextts/ to build)
 COPY pyproject.toml uv.lock README.md ./
+COPY indextts/ ./indextts/
 
 # Install all Python dependencies (including webui extra) using uv
 # PyTorch with CUDA 12.8 support is installed via the pytorch-cuda index
