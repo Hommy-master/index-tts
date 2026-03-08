@@ -42,6 +42,7 @@ desktop.ini
 
 # Documentation
 *.md
+!README.md
 docs/
 archive/
 
