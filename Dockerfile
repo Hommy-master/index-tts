@@ -1,6 +1,6 @@
 # IndexTTS2 Docker Image
-# Base: NVIDIA CUDA 12.8 with cuDNN on Ubuntu 22.04
-FROM nvidia/cuda:12.8.0-cudnn-runtime-ubuntu22.04
+# Base: NVIDIA CUDA 12.2 with cuDNN on Ubuntu 22.04
+FROM nvidia/cuda:12.2.2-cudnn-runtime-ubuntu22.04
 
 # Build arguments
 ARG PYTHON_VERSION=3.10
@@ -46,14 +46,14 @@ COPY pyproject.toml uv.lock README.md ./
 COPY indextts/ ./indextts/
 
 # Install all Python dependencies (including webui extra) using uv
-# PyTorch with CUDA 12.8 support is installed via the pytorch-cuda index
+# PyTorch with CUDA 12.2 support is installed via the pytorch-cuda index
 RUN uv pip install --system \
-    --extra-index-url https://download.pytorch.org/whl/cu128 \
+    --extra-index-url https://download.pytorch.org/whl/cu122 \
     torch==2.8.* torchaudio==2.8.*
 
 RUN uv pip install --system \
     --index-url https://pypi.org/simple \
-    --extra-index-url https://download.pytorch.org/whl/cu128 \
+    --extra-index-url https://download.pytorch.org/whl/cu122 \
     --index-strategy unsafe-best-match \
     ".[webui]"
 
