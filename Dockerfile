@@ -42,7 +42,7 @@ RUN pip install uv
 WORKDIR ${WORKDIR}
 
 # Copy dependency files first (for better Docker layer caching)
-COPY pyproject.toml uv.lock ./
+COPY pyproject.toml uv.lock README.md ./
 
 # Install all Python dependencies (including webui extra) using uv
 # PyTorch with CUDA 12.8 support is installed via the pytorch-cuda index
