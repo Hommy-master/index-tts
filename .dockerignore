@@ -1,0 +1,55 @@
+# Version control
+.git
+.gitignore
+.gitattributes
+
+# Python cache and virtual environments
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+.venv*/
+venv*/
+conda_env*/
+
+# Development tools
+.mypy_cache/
+.ruff_cache/
+.idea/
+.vscode/
+.qoder/
+
+# Distribution/Packaging
+/build/
+/dist/
+*.egg-info/
+.pypirc
+
+# OS files
+*.DS_Store
+Thumbs.db
+desktop.ini
+
+# Model checkpoints (mount via volume at runtime)
+/checkpoints/*
+!/checkpoints/*.yaml
+
+# Runtime output directories
+/outputs/
+/cache/
+/prompts/
+
+# Documentation
+*.md
+docs/
+archive/
+
+# Assets (not needed at runtime)
+assets/
+
+# Tests
+tests/
+
+# Lock file (dependencies already locked via pyproject.toml install)
+# uv.lock is needed for reproducible builds, keep it
