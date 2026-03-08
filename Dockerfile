@@ -53,6 +53,7 @@ RUN uv pip install --system \
 RUN uv pip install --system \
     --index-url https://pypi.org/simple \
     --extra-index-url https://download.pytorch.org/whl/cu128 \
+    --index-strategy unsafe-best-match \
     ".[webui]"
 
 # Copy the rest of the project source code
