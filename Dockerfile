@@ -1,6 +1,6 @@
 # IndexTTS2 Docker Image
 # Base: NVIDIA CUDA 12.2 with cuDNN on Ubuntu 22.04
-FROM nvidia/cuda:12.2.2-cudnn-runtime-ubuntu22.04
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
 
 # Build arguments
 ARG PYTHON_VERSION=3.10
