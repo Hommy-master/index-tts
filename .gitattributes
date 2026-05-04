@@ -8,7 +8,6 @@ tests/sample_prompt.wav filter=lfs diff=lfs merge=lfs -text
 examples/emo_hate.wav filter=lfs diff=lfs merge=lfs -text
 examples/voice_01.wav filter=lfs diff=lfs merge=lfs -text
 examples/voice_05.wav filter=lfs diff=lfs merge=lfs -text
-examples/voice_09.wav filter=lfs diff=lfs merge=lfs -text
 examples/voice_10.wav filter=lfs diff=lfs merge=lfs -text
 examples/voice_12.wav filter=lfs diff=lfs merge=lfs -text
 examples/voice_07.wav filter=lfs diff=lfs merge=lfs -text
