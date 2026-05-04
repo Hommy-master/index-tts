@@ -1,5 +1,7 @@
 # 部署 CI 构建的镜像：Docker Hub 上为 <DOCKERHUB_USERNAME>/index-tts（见 .github/workflows/dev.yml）
-# 使用前：在本目录创建 ./checkpoints 并放入模型权重，或改为绑定你已下载权重的目录。
+#
+# 首次启动：若 ./checkpoints 为空，容器内会自动从 Hugging Face 下载 IndexTeam/IndexTTS-2（与文档一致）。
+# 已有人工下载的权重时，直接挂载到 ./checkpoints 即可；离线环境设 INDEX_TTS_SKIP_DOWNLOAD=1 并挂载完整目录。
 #
 # 启动：docker compose up -d
 # 环境变量可写在同目录 .env 文件中（勿提交密钥）。
@@ -17,6 +19,12 @@ services:
       # 可选：限制可见 GPU，例如 "0" 或 "0,1"
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      # 中国大陆访问 Hugging Face 慢时可设：https://hf-mirror.com
+      HF_ENDPOINT: ${HF_ENDPOINT:-}
+      HUGGING_FACE_HUB_TOKEN: ${HUGGING_FACE_HUB_TOKEN:-}
+      # 置为 1 则不做自动下载（须自行挂载含 bpe.model 等文件的 checkpoints）
+      INDEX_TTS_SKIP_DOWNLOAD: ${INDEX_TTS_SKIP_DOWNLOAD:-0}
+      INDEX_TTS_HF_REPO: ${INDEX_TTS_HF_REPO:-IndexTeam/IndexTTS-2}
     volumes:
       # 模型目录（与 Dockerfile CMD 中 --model_dir 一致）
       - ./checkpoints:/app/checkpoints
@@ -31,4 +39,5 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 120s
+      # 首次需下载整包权重，用时可能较长；若 health 一直报 starting，可适当加大此值
+      start_period: 1800s

@@ -1,3 +1,4 @@
+scripts/docker-entrypoint.sh text eol=lf
 examples/voice_02.wav filter=lfs diff=lfs merge=lfs -text
 examples/voice_04.wav filter=lfs diff=lfs merge=lfs -text
 examples/emo_sad.wav filter=lfs diff=lfs merge=lfs -text
