@@ -1,57 +1,75 @@
-# === 1. 基础镜像：包含CUDA和Python ===
-FROM nvidia/cuda:12.8.0-devel-ubuntu22.04
+# IndexTTS2 Docker Image
+# Base: NVIDIA CUDA 12.2 with cuDNN on Ubuntu 22.04
+FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
 
-# 设置环境变量（避免交互式安装，安装uv和模型时用）
-ENV DEBIAN_FRONTEND=noninteractive \
+# Build arguments
+ARG PYTHON_VERSION=3.10
+ARG DEBIAN_FRONTEND=noninteractive
+
+# Environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    UV_HTTP_TIMEOUT=300 \
-    # 国内用户可选：配置镜像加速
-    HF_ENDPOINT=https://hf-mirror.com
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    WORKDIR=/app
 
-# === 2. 安装系统依赖 ===
+# Install system dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    # 基础工具和音频处理库
-    git \
-    wget \
-    curl \
+    python${PYTHON_VERSION} \
+    python${PYTHON_VERSION}-dev \
+    python3-pip \
+    python3-setuptools \
+    python3-wheel \
     build-essential \
+    git \
+    curl \
+    wget \
     ffmpeg \
     libsndfile1 \
-    libsox-fmt-all \
-    sox \
+    libsndfile1-dev \
+    libssl-dev \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# === 3. 安装uv包管理器 ===
-# uv是IndexTTS官方推荐的依赖管理工具，比pip快100倍以上[reference:0]
-# 也是唯一官方支持的依赖管理方式（pip可能导致依赖版本错误和随机运行时错误）[reference:1]
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh
-ENV PATH="/root/.cargo/bin:${PATH}"
+# Set python3.10 as default python
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python${PYTHON_VERSION} 1 \
+    && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python${PYTHON_VERSION} 1 \
+    && update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
 
-# === 4. 设置工作目录 ===
-WORKDIR /app
+# Install uv for fast package management
+RUN pip install uv
 
-# === 5. 复制并安装Python依赖 ===
-# 复制项目依赖文件
-COPY pyproject.toml uv.lock* ./
+WORKDIR ${WORKDIR}
 
-# 注意：IndexTTS官方要求强制使用uv sync安装依赖，不支持pip[reference:2]
-# 这里同步核心依赖和WebUI依赖、开发依赖（通过--all-extras）
-RUN uv sync --all-extras --no-dev || \
-    uv sync --all-extras
+# Copy dependency files and source package (hatchling needs indextts/ to build)
+COPY pyproject.toml uv.lock README.md ./
+COPY indextts/ ./indextts/
 
-# === 6. 复制源代码 ===
+# Install all Python dependencies (including webui extra) using uv
+# PyTorch with CUDA 12.2 support is installed via the pytorch-cuda index
+RUN uv pip install --system \
+    --extra-index-url https://download.pytorch.org/whl/cu122 \
+    torch==2.8.* torchaudio==2.8.*
+
+RUN uv pip install --system \
+    --index-url https://pypi.org/simple \
+    --extra-index-url https://download.pytorch.org/whl/cu122 \
+    --index-strategy unsafe-best-match \
+    ".[webui]"
+
+# Copy the rest of the project source code
 COPY . .
 
-# === 7. 解决模型下载路径（官方文档：checkpoints目录存放模型文件）[reference:3]===
-RUN mkdir -p /app/checkpoints
+# Create necessary runtime directories
+RUN mkdir -p outputs/tasks prompts checkpoints
 
-# 清理apt缓存，减小镜像体积
-RUN apt-get clean && rm -rf /var/lib/apt/lists/*
-
-# === 8. 暴露WebUI端口（Gradio默认端口） ===
+# Expose the WebUI port
 EXPOSE 7860
 
-# === 9. 启动命令（会先下载模型，再启动WebUI） ===
-# 模型下载统一使用程序自带机制（和官方镜像一致，启动时自动下载）
-# 若不想每次启动都下载模型，可以通过挂载卷持久化checkpoints目录
-CMD ["sh", "-c", "uv run python webui.py --host 0.0.0.0 --port 7860 --share False"]
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+    CMD curl -f http://localhost:7860/ || exit 1
+
+# Default command: start the WebUI
+# Mount model checkpoints via: -v /path/to/checkpoints:/app/checkpoints
+CMD ["python", "webui.py", "--host", "0.0.0.0", "--port", "7860", "--model_dir", "/app/checkpoints"]
