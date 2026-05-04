@@ -15,7 +15,7 @@ services:
       - 7860:7860
     environment:
       # 可选：限制可见 GPU，例如 "0" 或 "0,1"
-      NVIDIA_VISIBLE_DEVICES: ${NVIDIA_VISIBLE_DEVICES:-all}
+      NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
     volumes:
       # 模型目录（与 Dockerfile CMD 中 --model_dir 一致）
