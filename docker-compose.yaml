@@ -1,7 +1,7 @@
 # 部署镜像（默认 gogoshine/index-tts:latest，可按需改 image）。
 #
-# 中国大陆：已通过 HF_ENDPOINT 使用 Hugging Face 镜像站加速首次自动下载权重。
-# 若 checkpoints 已有人工下载的完整权重，可将 INDEX_TTS_SKIP_DOWNLOAD 改为 "1"。
+# 权重不在容器内下载：请先在宿主机准备好 checkpoints（见 README Model Download），
+# 通过 ./checkpoints 挂载进容器。推理时若缺失 Hugging Face 依赖缓存，仍可设置 HF_ENDPOINT 等。
 #
 # 启动：docker compose up -d
 #
@@ -17,12 +17,8 @@ services:
     environment:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
-      # Hugging Face 镜像（中国大陆访问 hub 较慢时使用）
+      # Hugging Face 镜像（可选：运行时仍需拉取少量 hub 文件时使用）
       HF_ENDPOINT: https://hf-mirror.com
-      # 官方权重仓库；首次启动且 ./checkpoints 为空时由容器入口脚本自动下载
-      INDEX_TTS_HF_REPO: IndexTeam/IndexTTS-2
-      # 0 = 缺权重时自动下载；1 = 不下载（须确保 ./checkpoints 已含 bpe.model 等文件）
-      INDEX_TTS_SKIP_DOWNLOAD: "0"
     volumes:
       - ./checkpoints:/app/checkpoints
       - ./outputs:/app/outputs

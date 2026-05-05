@@ -63,9 +63,6 @@ COPY . .
 # Create necessary runtime directories
 RUN mkdir -p outputs/tasks prompts checkpoints
 
-COPY scripts/docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
-RUN chmod +x /usr/local/bin/docker-entrypoint.sh
-
 # Expose the WebUI port
 EXPOSE 7860
 
@@ -73,7 +70,7 @@ EXPOSE 7860
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:7860/ || exit 1
 
-# If /app/checkpoints lacks weights, entrypoint downloads IndexTeam/IndexTTS-2 (override with INDEX_TTS_HF_REPO).
-# Mount model checkpoints via: -v /path/to/checkpoints:/app/checkpoints
-ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
+# Model weights are not downloaded at runtime: mount a host directory that already
+# contains IndexTTS-2 checkpoints (and optional ./checkpoints/hf_cache for hub files), e.g.:
+#   docker run -v /path/to/checkpoints:/app/checkpoints ...
 CMD ["python", "webui.py", "--host", "0.0.0.0", "--port", "7860", "--model_dir", "/app/checkpoints"]
