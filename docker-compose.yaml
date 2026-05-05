@@ -3,6 +3,9 @@
 # 权重不在容器内下载：请先在宿主机准备好 checkpoints（见 README Model Download），
 # 通过 ./checkpoints 挂载进容器。推理时若缺失 Hugging Face 依赖缓存，仍可设置 HF_ENDPOINT 等。
 #
+# 下列环境变量在容器启动时注入进程，无需改应用代码即可把各类缓存放到挂载卷 ./checkpoints 下，
+# 避免「重建容器后缓存落在容器层 /root/.cache 而丢失、反复下载」。首次仍需成功下载一次。
+#
 # 启动：docker compose up -d
 #
 # 依赖：NVIDIA 驱动 + NVIDIA Container Toolkit
@@ -12,6 +15,18 @@ services:
     image: gogoshine/index-tts:latest
     container_name: index-tts
     restart: unless-stopped
+    # FP16 + BigVGAN CUDA kernel（镜像 CMD 未更新时也可生效）；若启动报错可去掉 --cuda_kernel
+    command:
+      - python
+      - webui.py
+      - --host
+      - "0.0.0.0"
+      - --port
+      - "7860"
+      - --model_dir
+      - /app/checkpoints
+      - --fp16
+      - --cuda_kernel
     ports:
       - "7860:7860"
     environment:
@@ -19,15 +34,31 @@ services:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       # Hugging Face 镜像（可选：运行时仍需拉取少量 hub 文件时使用）
       HF_ENDPOINT: https://hf-mirror.com
+      # ---- 缓存全部落在挂载目录 /app/checkpoints（对应宿主机 ./checkpoints）----
+      HF_HOME: /app/checkpoints/.hf
+      # infer_v2 会在 import 时覆盖为 ./checkpoints/hf_cache（cwd=/app 时与下列路径一致）
+      HF_HUB_CACHE: /app/checkpoints/hf_cache
+      TRANSFORMERS_CACHE: /app/checkpoints/.hf/transformers
+      TORCH_HOME: /app/checkpoints/.hf/torch
+      XDG_CACHE_HOME: /app/checkpoints/.cache
+      MODELSCOPE_CACHE: /app/checkpoints/.hf/modelscope
+      HF_HUB_DISABLE_XET: "1"
+      # CPU 侧预处理 / BLAS 线程（与 cpus 上限对齐，避免过少线程拖慢特征与音频处理）
+      OMP_NUM_THREADS: "6"
+      MKL_NUM_THREADS: "6"
+      NUMEXPR_NUM_THREADS: "6"
+      # 减轻显存碎片导致的卡顿（PyTorch 2.x）
+      PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
     volumes:
       - ./checkpoints:/app/checkpoints
       - ./outputs:/app/outputs
       - ./prompts:/app/prompts
     shm_size: 2gb
+    cpus: '6'
     gpus: all
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:7860/"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 3600s
+      start_period: 300s

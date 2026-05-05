@@ -73,4 +73,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
 # Model weights are not downloaded at runtime: mount a host directory that already
 # contains IndexTTS-2 checkpoints (and optional ./checkpoints/hf_cache for hub files), e.g.:
 #   docker run -v /path/to/checkpoints:/app/checkpoints ...
-CMD ["python", "webui.py", "--host", "0.0.0.0", "--port", "7860", "--model_dir", "/app/checkpoints"]
+# --fp16: faster inference on GPU; --cuda_kernel: BigVGAN fused CUDA kernels when supported
+CMD ["python", "webui.py", "--host", "0.0.0.0", "--port", "7860", "--model_dir", "/app/checkpoints", "--fp16", "--cuda_kernel"]
