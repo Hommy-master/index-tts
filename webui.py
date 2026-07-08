@@ -28,8 +28,27 @@ parser.add_argument("--model_dir", type=str, default="./checkpoints", help="Mode
 parser.add_argument("--fp16", action="store_true", default=False, help="Use FP16 for inference if available")
 parser.add_argument("--deepspeed", action="store_true", default=False, help="Use DeepSpeed to accelerate if available")
 parser.add_argument("--cuda_kernel", action="store_true", default=False, help="Use CUDA kernel for inference if available")
+parser.add_argument("--accel", action="store_true", default=False, help="Use GPT2 acceleration engine if available")
+parser.add_argument("--torch_compile", action="store_true", default=False, help="Use torch.compile to optimize s2mel if available")
 parser.add_argument("--gui_seg_tokens", type=int, default=120, help="GUI: Max tokens per generation segment")
 cmd_args = parser.parse_args()
+
+# Validate optional acceleration dependencies early, so missing extras fail
+# at startup instead of halfway through inference.
+def _require_optional_extra(flag_name, module_name, install_cmd):
+    try:
+        __import__(module_name)
+    except ImportError:
+        parser.error(
+            f"--{flag_name} requires {module_name}, which is not installed. "
+            f"Install it with: {install_cmd}"
+        )
+
+if cmd_args.accel:
+    _require_optional_extra("accel", "flash_attn", "uv sync --extra accel")
+
+if cmd_args.torch_compile:
+    _require_optional_extra("torch_compile", "triton", "uv sync --extra torch_compile")
 
 required_files = [
     "bpe.model",
@@ -74,12 +93,20 @@ MODE = 'local'
 # Download example audio files if missing
 ensure_examples_available()
 
-tts = IndexTTS2(model_dir=cmd_args.model_dir,
-                cfg_path=os.path.join(cmd_args.model_dir, "config.yaml"),
-                use_fp16=cmd_args.fp16,
-                use_deepspeed=cmd_args.deepspeed,
-                use_cuda_kernel=cmd_args.cuda_kernel,
-                )
+def build_tts(use_accel=False, use_torch_compile=False):
+    """Build an IndexTTS2 instance with the requested acceleration options."""
+    return IndexTTS2(
+        model_dir=cmd_args.model_dir,
+        cfg_path=os.path.join(cmd_args.model_dir, "config.yaml"),
+        use_fp16=cmd_args.fp16,
+        use_deepspeed=cmd_args.deepspeed,
+        use_cuda_kernel=cmd_args.cuda_kernel,
+        use_accel=use_accel,
+        use_torch_compile=use_torch_compile,
+    )
+
+
+tts = build_tts(use_accel=cmd_args.accel, use_torch_compile=cmd_args.torch_compile)
 # 支持的语言列表
 LANGUAGES = {
     "中文": "zh_CN",
@@ -548,6 +575,7 @@ def gen_single(emo_control_method,prompt, text,
     tts.gr_progress = progress
     do_sample, top_p, top_k, temperature, \
         length_penalty, num_beams, repetition_penalty, max_mel_tokens = args
+
     kwargs = {
         "do_sample": bool(do_sample),
         "top_p": float(top_p),
