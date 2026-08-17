@@ -15,6 +15,7 @@ services:
     image: gogoshine/index-tts:latest
     container_name: index-tts
     restart: unless-stopped
+    #entrypoint: ["/bin/sh", "-c", "sleep 10000"]
     # FP16 + BigVGAN CUDA kernel（镜像 CMD 未更新时也可生效）；若启动报错可去掉 --cuda_kernel
     command:
       - python
