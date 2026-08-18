@@ -1,0 +1,34 @@
+# Docker build context 排除项：避免把本地大文件（模型权重、git 历史、输出）打进构建上下文
+.git
+.gitignore
+.dockerignore
+.gitattributes
+
+# 本地部署目录（含模型权重，4GB+）
+docker/
+
+# 模型与缓存
+checkpoints/
+checkpoints2.5/
+outputs/
+cache/
+
+# 环境与缓存
+.venv*/
+venv*/
+conda_env*/
+__pycache__/
+*.py[cod]
+.mypy_cache/
+.ruff_cache/
+
+# 示例音频（按需下载，不打包；cases.jsonl 保留）
+examples/*.wav
+tests/sample_prompt.wav
+
+# 测试与文档（非运行时依赖）
+tests/
+cli_tests/
+docs/
+assets/
+archive/

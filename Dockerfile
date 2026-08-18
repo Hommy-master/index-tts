@@ -1,5 +1,7 @@
-# IndexTTS2 Docker Image
+# IndexTTS2 / IndexTTS-2.5 Docker Image
 # Base: NVIDIA CUDA 12.2 with cuDNN on Ubuntu 22.04
+# 说明：CUDA 运行时由 PyTorch 自带的 cu128 wheel 提供（与 uv.lock 一致），
+#       宿主仅需较新的 NVIDIA 驱动即可（>= 570）。
 FROM nvidia/cuda:12.2.2-cudnn8-runtime-ubuntu22.04
 
 # Build arguments
@@ -46,14 +48,15 @@ COPY pyproject.toml uv.lock README.md ./
 COPY indextts/ ./indextts/
 
 # Install all Python dependencies (including webui extra) using uv
-# PyTorch with CUDA 12.2 support is installed via the pytorch-cuda index
+# PyTorch with CUDA 12.8 support is installed via the pytorch-cuda index
+# (matching the upstream uv.lock: torch 2.8.0+cu128 for linux/win32)
 RUN uv pip install --system \
-    --extra-index-url https://download.pytorch.org/whl/cu122 \
+    --extra-index-url https://download.pytorch.org/whl/cu128 \
     torch==2.8.* torchaudio==2.8.*
 
 RUN uv pip install --system \
     --index-url https://pypi.org/simple \
-    --extra-index-url https://download.pytorch.org/whl/cu122 \
+    --extra-index-url https://download.pytorch.org/whl/cu128 \
     --index-strategy unsafe-best-match \
     ".[webui]"
 
@@ -63,15 +66,13 @@ COPY . .
 # Create necessary runtime directories
 RUN mkdir -p outputs/tasks prompts checkpoints
 
-# Expose the WebUI port
+# Expose the WebUI / API port
 EXPOSE 7860
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:7860/ || exit 1
 
-# Model weights are not downloaded at runtime: mount a host directory that already
-# contains IndexTTS-2 checkpoints (and optional ./checkpoints/hf_cache for hub files), e.g.:
-#   docker run -v /path/to/checkpoints:/app/checkpoints ...
+# 默认使用 IndexTTS-2.5 模型（首次启动自动下载权重到 /app/checkpoints）。
 # --fp16: faster inference on GPU; --cuda_kernel: BigVGAN fused CUDA kernels when supported
-CMD ["python", "webui.py", "--host", "0.0.0.0", "--port", "7860", "--model_dir", "/app/checkpoints", "--fp16", "--cuda_kernel"]
+CMD ["python", "webui.py", "--host", "0.0.0.0", "--port", "7860", "--model_dir", "/app/checkpoints", "--version", "2.5", "--fp16", "--cuda_kernel"]
