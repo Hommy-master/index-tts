@@ -36,3 +36,5 @@ desktop.ini
 
 .claude
 .memsearch
+
+docker/*
