@@ -1,6 +1,13 @@
-# 部署镜像（默认 gogoshine/index-tts:latest，可按需改 image）。
+# IndexTTS REST API 部署
 #
-# 权重下载：webui.py 启动时自动检测 /app/checkpoints 是否完整（IndexTTS-2.5），
+# 提供声音克隆 + 语音合成 REST API：
+#   POST /api/clone   - 上传参考音频克隆声音
+#   GET  /api/voices  - 列出已克隆的声音
+#   POST /api/tts     - 用克隆的声音生成语音
+#   GET  /api/health  - 健康检查
+#   GET  /docs        - Swagger API 文档
+#
+# 权重下载：api_server.py 启动时自动检测 /app/checkpoints 是否完整（IndexTTS-2.5），
 # 缺失时自动从 ModelScope / HuggingFace 下载（断点续传），无需手动干预。
 #
 # 启动：docker compose up -d
@@ -9,17 +16,18 @@
 
 services:
   index-tts:
-    image: gogoshine/index-tts:latest
+    image: gogoshine/index-tts:2.5-local
     container_name: index-tts
     restart: unless-stopped
+    # 运行 REST API 服务器（api_server.py），端口 9880
     # FP16 + BigVGAN CUDA kernel；默认模型版本 2.5（IndexTTS-2.5）
     command:
       - python
-      - webui.py
+      - api_server.py
       - --host
       - "0.0.0.0"
       - --port
-      - "7860"
+      - "9880"
       - --model_dir
       - /app/checkpoints
       - --version
@@ -27,7 +35,7 @@ services:
       - --fp16
       - --cuda_kernel
     ports:
-      - "7860:7860"
+      - "9880:9880"
     environment:
       NVIDIA_VISIBLE_DEVICES: all
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
@@ -35,30 +43,34 @@ services:
       USE_MODELSCOPE: "true"
       # Hugging Face 镜像（备用源）
       HF_ENDPOINT: https://hf-mirror.com
-      # ---- 缓存全部落在挂载目录 /app/checkpoints（对应宿主机 ./checkpoints）----
+      # ---- 缓存全部落在挂载目录 /app/checkpoints（对应宿主机 ./docker/checkpoints）----
       HF_HOME: /app/checkpoints/.hf
-      # infer_v2_5 会在 import 时覆盖为 ./checkpoints/hf_cache（cwd=/app 时与下列路径一致）
       HF_HUB_CACHE: /app/checkpoints/hf_cache
       TRANSFORMERS_CACHE: /app/checkpoints/.hf/transformers
       TORCH_HOME: /app/checkpoints/.hf/torch
       XDG_CACHE_HOME: /app/checkpoints/.cache
       MODELSCOPE_CACHE: /app/checkpoints/.hf/modelscope
       HF_HUB_DISABLE_XET: "1"
-      # CPU 侧预处理 / BLAS 线程（与 cpus 上限对齐，避免过少线程拖慢特征与音频处理）
+      # CPU 侧预处理 / BLAS 线程
       OMP_NUM_THREADS: "6"
       MKL_NUM_THREADS: "6"
       NUMEXPR_NUM_THREADS: "6"
       # 减轻显存碎片导致的卡顿（PyTorch 2.x）
       PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
     volumes:
+      # 挂载 api_server.py 到容器内
+      - ./api_server.py:/app/api_server.py
+      # 模型权重持久化
       - ./docker/checkpoints:/app/checkpoints
+      # 生成的音频输出
       - ./docker/outputs:/app/outputs
+      # 克隆的声音参考音频
       - ./docker/prompts:/app/prompts
     shm_size: 2gb
     cpus: '6'
     gpus: all
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:7860/"]
+      test: ["CMD", "curl", "-f", "http://localhost:9880/api/health"]
       interval: 30s
       timeout: 10s
       retries: 3
