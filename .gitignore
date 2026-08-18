@@ -29,8 +29,6 @@ desktop.ini
 /checkpoints*/*
 !/checkpoints*/*.yaml
 /outputs/
-# 本地 Docker 部署目录（模型权重等大文件，不入库）
-/docker/
 
 # Example audio files (downloaded on demand, not stored in git)
 /examples/*.wav
