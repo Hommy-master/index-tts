@@ -51,9 +51,9 @@ services:
       # 减轻显存碎片导致的卡顿（PyTorch 2.x）
       PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
     volumes:
-      - ./checkpoints:/app/checkpoints
-      - ./outputs:/app/outputs
-      - ./prompts:/app/prompts
+      - ./docker/checkpoints:/app/checkpoints
+      - ./docker/outputs:/app/outputs
+      - ./docker/prompts:/app/prompts
     shm_size: 2gb
     cpus: '6'
     gpus: all
