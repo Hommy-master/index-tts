@@ -16,7 +16,7 @@
 
 services:
   index-tts:
-    image: gogoshine/index-tts:2.5-local
+    image: gogoshine/index-tts:latest
     container_name: index-tts
     restart: unless-stopped
     # 运行 REST API 服务器（api_server.py），端口 9880
@@ -58,14 +58,12 @@ services:
       # 减轻显存碎片导致的卡顿（PyTorch 2.x）
       PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
     volumes:
-      # 挂载 api_server.py 到容器内
-      - ./api_server.py:/app/api_server.py
       # 模型权重持久化
-      - ./docker/checkpoints:/app/checkpoints
+      - ./checkpoints:/app/checkpoints
       # 生成的音频输出
-      - ./docker/outputs:/app/outputs
+      - ./outputs:/app/outputs
       # 克隆的声音参考音频
-      - ./docker/prompts:/app/prompts
+      - ./prompts:/app/prompts
     shm_size: 2gb
     cpus: '6'
     gpus: all
