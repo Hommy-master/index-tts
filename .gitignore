@@ -41,3 +41,4 @@ docker/*
 /test_output_en.wav
 /test_output_zh.wav
 /docker
+/output
