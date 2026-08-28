@@ -64,7 +64,7 @@ RUN uv pip install --system \
 COPY . .
 
 # Create necessary runtime directories
-RUN mkdir -p outputs/tasks prompts checkpoints
+RUN mkdir -p output/tasks prompts checkpoints
 
 # Expose the WebUI / API port
 EXPOSE 7860

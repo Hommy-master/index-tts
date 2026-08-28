@@ -173,7 +173,7 @@ EMO_CHOICES_ALL = [i18n("与音色参考音频相同"),
 EMO_CHOICES_OFFICIAL = EMO_CHOICES_ALL[:-1]  # skip experimental features
 EMO_CHOICES_EXPERIMENTAL = EMO_CHOICES_ALL if LOAD_QWEN_EMO else EMO_CHOICES_OFFICIAL
 
-os.makedirs("outputs/tasks",exist_ok=True)
+os.makedirs("output/tasks",exist_ok=True)
 os.makedirs("prompts",exist_ok=True)
 
 MAX_LENGTH_TO_USE_SPEED = 70
@@ -636,7 +636,7 @@ def gen_single(emo_control_method,prompt, text,
                 *args, progress=gr.Progress()):
     output_path = None
     if not output_path:
-        output_path = os.path.join("outputs", f"spk_{int(time.time())}.wav")
+        output_path = os.path.join("output", f"spk_{int(time.time())}.wav")
     # set gradio progress
     tts.gr_progress = progress
     do_sample, top_p, top_k, temperature, \

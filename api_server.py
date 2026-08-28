@@ -152,12 +152,29 @@ tts = build_tts()
 print(">> IndexTTS model loaded successfully!")
 
 # ---------------------------------------------------------------------------
-# Directories for voice profiles and outputs
+# Directories for voice profiles and output
 # ---------------------------------------------------------------------------
 PROMPTS_DIR = os.path.join(current_dir, "prompts")
-OUTPUTS_DIR = os.path.join(current_dir, "outputs")
+OUTPUT_DIR = os.path.join(current_dir, "output")
 os.makedirs(PROMPTS_DIR, exist_ok=True)
-os.makedirs(OUTPUTS_DIR, exist_ok=True)
+os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+# DOWNLOAD_URL: replace container prefix /app/ to form a public download URL.
+# Example: DOWNLOAD_URL=http://192.168.3.21/  +  /app/output/test.wav
+#       -> http://192.168.3.21/output/test.wav
+DOWNLOAD_URL = os.environ.get("DOWNLOAD_URL", "").strip()
+
+
+def path_to_download_url(file_path: str) -> str:
+    """Convert an absolute file path under /app/ into a DOWNLOAD_URL-based URL."""
+    abs_path = os.path.abspath(file_path).replace("\\", "/")
+    if DOWNLOAD_URL:
+        base = DOWNLOAD_URL if DOWNLOAD_URL.endswith("/") else DOWNLOAD_URL + "/"
+        prefix = "/app/"
+        if abs_path.startswith(prefix):
+            return base + abs_path[len(prefix) :]
+        # Outside /app (e.g. local dev): expose via relative API route
+    return f"/api/audio/{os.path.basename(abs_path)}"
 
 # Thread lock to serialize inference (model is not thread-safe)
 _infer_lock = threading.Lock()
@@ -367,7 +384,7 @@ async def text_to_speech(req: TTSRequest):
 
     # Generate output path
     output_filename = f"tts_{int(time.time())}_{uuid.uuid4().hex[:6]}.wav"
-    output_path = os.path.join(OUTPUTS_DIR, output_filename)
+    output_path = os.path.join(OUTPUT_DIR, output_filename)
 
     # Build generation kwargs
     gen_kwargs = {
@@ -417,8 +434,11 @@ async def text_to_speech(req: TTSRequest):
     file_size = os.path.getsize(output_path)
     print(f"[TTS] Done in {elapsed:.1f}s, output: {output_filename} ({file_size} bytes)")
 
+    audio_url = path_to_download_url(output_path)
+    print(f"[TTS] audio_url: {audio_url}")
+
     return TTSResponse(
-        audio_url=f"/api/audio/{output_filename}",
+        audio_url=audio_url,
         audio_path=output_path,
         duration_seconds=round(elapsed, 2),
     )
@@ -429,7 +449,7 @@ async def get_audio(filename: str):
     """Download a generated audio file."""
     # Prevent path traversal
     safe_name = os.path.basename(filename)
-    audio_path = os.path.join(OUTPUTS_DIR, safe_name)
+    audio_path = os.path.join(OUTPUT_DIR, safe_name)
     if not os.path.isfile(audio_path):
         raise HTTPException(status_code=404, detail="Audio file not found")
     return FileResponse(audio_path, media_type="audio/wav", filename=safe_name)

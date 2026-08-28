@@ -57,11 +57,14 @@ services:
       NUMEXPR_NUM_THREADS: "6"
       # 减轻显存碎片导致的卡顿（PyTorch 2.x）
       PYTORCH_CUDA_ALLOC_CONF: "expandable_segments:True"
+      # 将容器内 /app/ 路径替换为此前缀，得到可下载的音频 URL
+      # 例：/app/output/test.wav -> http://192.168.3.21/output/test.wav
+      DOWNLOAD_URL: "http://192.168.3.21/"
     volumes:
       # 模型权重持久化
       - ./checkpoints:/app/checkpoints
       # 生成的音频输出
-      - ./outputs:/app/outputs
+      - ./output:/app/output
       # 克隆的声音参考音频
       - ./prompts:/app/prompts
     shm_size: 2gb
