@@ -30,7 +30,7 @@ curl http://127.0.0.1:9880/api/health
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/api/health` | 健康检查 |
-| `POST` | `/api/clone` | 上传参考音频，创建音色 |
+| `POST` | `/api/clone` | 通过音频 URL 下载并创建音色 |
 | `GET` | `/api/voices` | 列出已保存音色 |
 | `DELETE` | `/api/voices/{voice_id}` | 删除音色 |
 | `GET` | `/api/voices/{voice_id}/audio` | 下载音色参考音频 |
@@ -73,14 +73,23 @@ curl http://127.0.0.1:9880/api/health
 
 ## POST `/api/clone`
 
-上传参考音频，创建零样本音色档案。无需训练，后续用返回的 `voice_id` 调用 TTS。
+通过参考音频的 HTTP(S) URL 创建零样本音色。服务端自动下载文件（失败最多重试 5 次，使用 HTTP Range **断点续传**），保存到 `prompts` 后返回可访问的 `audio_url`。
 
-**Content-Type:** `multipart/form-data`
+**Content-Type:** `application/json`
 
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `file` | file | 是 | 参考音频：`.wav` / `.mp3` / `.flac` / `.ogg` |
+| `audio_url` | string | 是 | 参考音频下载地址（`http` / `https`），支持 `.wav` / `.mp3` / `.flac` / `.ogg` |
 | `voice_id` | string | 否 | 音色名（仅字母数字、`_`、`-`）。省略则自动生成 |
+
+**请求示例**
+
+```json
+{
+  "audio_url": "http://192.168.3.21/samples/alice.wav",
+  "voice_id": "alice"
+}
+```
 
 **响应** `200`
 
@@ -88,7 +97,7 @@ curl http://127.0.0.1:9880/api/health
 {
   "voice_id": "alice",
   "message": "Voice profile 'alice' saved (123456 bytes). Ready for TTS.",
-  "audio_path": "/app/prompts/alice.wav"
+  "audio_url": "http://192.168.3.21/prompts/alice.wav"
 }
 ```
 
@@ -96,18 +105,24 @@ curl http://127.0.0.1:9880/api/health
 |------|------|------|
 | `voice_id` | string | 后续 TTS 使用的 ID |
 | `message` | string | 提示信息 |
-| `audio_path` | string | 容器内保存路径 |
+| `audio_url` | string | 本地保存后的访问地址（`DOWNLOAD_URL` 将 `/app/` 替换后的结果） |
+
+说明：响应中的 `audio_url` 与 TTS 一致，将容器路径 `/app/prompts/...` 的 `/app/` 替换为 `DOWNLOAD_URL`。
 
 **错误**
 
 | HTTP | 说明 |
 |------|------|
-| `400` | `voice_id` 非法 |
+| `400` | `audio_url` 为空/非 http(s)，或 `voice_id` 非法 |
+| `502` | 下载失败（已重试 5 次仍失败） |
 
 ```bash
 curl -X POST http://127.0.0.1:9880/api/clone \
-  -F "file=@./sample.wav" \
-  -F "voice_id=alice"
+  -H "Content-Type: application/json" \
+  -d '{
+    "audio_url": "http://192.168.3.21/samples/alice.wav",
+    "voice_id": "alice"
+  }'
 ```
 
 ---
@@ -206,7 +221,6 @@ curl -OJ http://127.0.0.1:9880/api/voices/alice/audio
 ```json
 {
   "audio_url": "http://192.168.3.21/output/tts_1710000000_ab12cd.wav",
-  "audio_path": "/app/output/tts_1710000000_ab12cd.wav",
   "duration_seconds": 3.42
 }
 ```
@@ -214,7 +228,6 @@ curl -OJ http://127.0.0.1:9880/api/voices/alice/audio
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `audio_url` | string | 可访问的下载地址。若配置了 `DOWNLOAD_URL`，为外链；否则为 `/api/audio/{filename}` |
-| `audio_path` | string | 容器内绝对路径 |
 | `duration_seconds` | number \| null | 推理耗时（秒），非音频时长 |
 
 ### 错误
@@ -284,15 +297,17 @@ import requests
 
 BASE = "http://127.0.0.1:9880"
 
-# 1. 克隆音色
-with open("sample.wav", "rb") as f:
-    r = requests.post(
-        f"{BASE}/api/clone",
-        files={"file": f},
-        data={"voice_id": "alice"},
-    )
+# 1. 克隆音色（服务端按 URL 下载）
+r = requests.post(
+    f"{BASE}/api/clone",
+    json={
+        "audio_url": "http://192.168.3.21/samples/alice.wav",
+        "voice_id": "alice",
+    },
+)
 r.raise_for_status()
 voice_id = r.json()["voice_id"]
+print(r.json()["audio_url"])
 
 # 2. 合成
 r = requests.post(

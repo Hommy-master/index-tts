@@ -4,7 +4,7 @@ IndexTTS REST API Server
 Provides clean REST endpoints for zero-shot voice cloning and speech synthesis.
 
 Endpoints:
-  POST   /api/clone          - Upload a reference audio to create a named voice profile
+  POST   /api/clone          - Provide a reference audio URL to create a named voice profile
   GET    /api/voices         - List all saved voice profiles
   DELETE /api/voices/{name}  - Delete a voice profile
   POST   /api/tts            - Generate speech from text using a cloned voice
@@ -16,6 +16,7 @@ Usage:
 """
 
 import argparse
+import asyncio
 import os
 import sys
 import time
@@ -23,6 +24,9 @@ import uuid
 import json
 import warnings
 import threading
+import urllib.error
+import urllib.request
+from urllib.parse import unquote, urlparse
 
 warnings.filterwarnings("ignore", category=FutureWarning)
 warnings.filterwarnings("ignore", category=UserWarning)
@@ -173,8 +177,13 @@ def path_to_download_url(file_path: str) -> str:
         prefix = "/app/"
         if abs_path.startswith(prefix):
             return base + abs_path[len(prefix) :]
-        # Outside /app (e.g. local dev): expose via relative API route
-    return f"/api/audio/{os.path.basename(abs_path)}"
+    # Local fallback routes
+    name = os.path.basename(abs_path)
+    stem, _ = os.path.splitext(name)
+    prompts_prefix = os.path.abspath(PROMPTS_DIR).replace("\\", "/")
+    if abs_path.startswith(prompts_prefix + "/") or abs_path.startswith(prompts_prefix):
+        return f"/api/voices/{stem}/audio"
+    return f"/api/audio/{name}"
 
 # Thread lock to serialize inference (model is not thread-safe)
 _infer_lock = threading.Lock()
@@ -185,10 +194,10 @@ SUPPORTED_LANGS = ["ZH", "EN", "JA", "AR", "ES"] if IS_V25 else ["ZH", "EN"]
 # ---------------------------------------------------------------------------
 # FastAPI app
 # ---------------------------------------------------------------------------
-from fastapi import FastAPI, UploadFile, File, Form, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import Optional
 import uvicorn
 
@@ -227,15 +236,22 @@ class TTSRequest(BaseModel):
     max_text_tokens_per_segment: int = 120
 
 
+class CloneRequest(BaseModel):
+    audio_url: str = Field(..., description="HTTP(S) URL of the reference audio to download")
+    voice_id: Optional[str] = Field(
+        None,
+        description="Optional name for the voice profile. Auto-generated if omitted.",
+    )
+
+
 class CloneResponse(BaseModel):
     voice_id: str
     message: str
-    audio_path: str
+    audio_url: str
 
 
 class TTSResponse(BaseModel):
     audio_url: str
-    audio_path: str
     duration_seconds: Optional[float] = None
 
 
@@ -248,6 +264,85 @@ class VoiceInfo(BaseModel):
 # ---------------------------------------------------------------------------
 # Helper functions
 # ---------------------------------------------------------------------------
+AUDIO_EXTS = (".wav", ".mp3", ".flac", ".ogg")
+CONTENT_TYPE_EXT = {
+    "audio/wav": ".wav",
+    "audio/x-wav": ".wav",
+    "audio/wave": ".wav",
+    "audio/mpeg": ".mp3",
+    "audio/mp3": ".mp3",
+    "audio/flac": ".flac",
+    "audio/ogg": ".ogg",
+    "application/ogg": ".ogg",
+}
+
+
+def guess_audio_ext(url: str, content_type: Optional[str] = None) -> str:
+    path_ext = os.path.splitext(unquote(urlparse(url).path))[1].lower()
+    if path_ext in AUDIO_EXTS:
+        return path_ext
+    if content_type:
+        ctype = content_type.split(";")[0].strip().lower()
+        if ctype in CONTENT_TYPE_EXT:
+            return CONTENT_TYPE_EXT[ctype]
+    return ".wav"
+
+
+def download_with_resume(url: str, dest_path: str, max_retries: int = 5, chunk_size: int = 256 * 1024) -> int:
+    """
+    Download ``url`` to ``dest_path`` with HTTP Range resume.
+    On failure retries up to ``max_retries`` times, continuing from the
+    already-written ``.part`` bytes instead of restarting from scratch.
+    """
+    part_path = dest_path + ".part"
+    last_error: Exception | None = None
+
+    for attempt in range(1, max_retries + 1):
+        try:
+            existing = os.path.getsize(part_path) if os.path.isfile(part_path) else 0
+            headers = {"User-Agent": "IndexTTS-API/1.0"}
+            if existing > 0:
+                headers["Range"] = f"bytes={existing}-"
+                print(f"[clone] resume download from byte {existing} (attempt {attempt}/{max_retries})")
+            else:
+                print(f"[clone] start download (attempt {attempt}/{max_retries}): {url}")
+
+            req = urllib.request.Request(url, headers=headers)
+            with urllib.request.urlopen(req, timeout=120) as resp:
+                status = getattr(resp, "status", None) or resp.getcode()
+                # Server ignored Range and sent full body -> rewrite from scratch.
+                if existing > 0 and status == 200:
+                    print("[clone] server returned 200 for Range request; rewriting from start")
+                    existing = 0
+                    mode = "wb"
+                elif existing > 0 and status == 206:
+                    mode = "ab"
+                elif existing == 0 and status in (200, 206):
+                    mode = "wb"
+                else:
+                    raise RuntimeError(f"unexpected HTTP status {status} while downloading")
+
+                with open(part_path, mode) as out:
+                    while True:
+                        chunk = resp.read(chunk_size)
+                        if not chunk:
+                            break
+                        out.write(chunk)
+
+            os.replace(part_path, dest_path)
+            size = os.path.getsize(dest_path)
+            print(f"[clone] download complete: {dest_path} ({size} bytes)")
+            return size
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, OSError, RuntimeError) as exc:
+            last_error = exc
+            print(f"[clone] download attempt {attempt}/{max_retries} failed: {exc}")
+            if attempt < max_retries:
+                delay = min(2 ** (attempt - 1), 16)
+                time.sleep(delay)
+
+    raise RuntimeError(f"Failed to download after {max_retries} retries: {last_error}")
+
+
 def list_voice_profiles():
     """List all saved voice profile files in the prompts directory."""
     voices = []
@@ -255,7 +350,7 @@ def list_voice_profiles():
         return voices
     for fname in sorted(os.listdir(PROMPTS_DIR)):
         fpath = os.path.join(PROMPTS_DIR, fname)
-        if os.path.isfile(fpath) and fname.lower().endswith((".wav", ".mp3", ".flac", ".ogg")):
+        if os.path.isfile(fpath) and fname.lower().endswith(AUDIO_EXTS):
             voices.append(VoiceInfo(
                 voice_id=os.path.splitext(fname)[0],
                 filename=fname,
@@ -266,8 +361,7 @@ def list_voice_profiles():
 
 def resolve_voice_path(voice_id: str) -> str:
     """Resolve a voice_id to an audio file path in the prompts directory."""
-    # Try exact filename match first
-    for ext in ("", ".wav", ".mp3", ".flac", ".ogg"):
+    for ext in ("",) + AUDIO_EXTS:
         candidate = os.path.join(PROMPTS_DIR, voice_id + ext)
         if os.path.isfile(candidate):
             return candidate
@@ -292,46 +386,45 @@ async def health():
 
 
 @app.post("/api/clone", response_model=CloneResponse)
-async def clone_voice(
-    file: UploadFile = File(..., description="Reference audio file (wav/mp3/flac)"),
-    voice_id: Optional[str] = Form(None, description="Optional name for the voice profile. Auto-generated if omitted."),
-):
+async def clone_voice(req: CloneRequest):
     """
-    Clone a voice by uploading a reference audio sample.
+    Clone a voice by downloading a reference audio from ``audio_url``.
 
-    The audio is saved to the prompts directory and can be referenced by
-    `voice_id` in subsequent /api/tts calls. No model training is needed —
-    IndexTTS performs zero-shot cloning at inference time.
+    The file is saved under the prompts directory and can be referenced by
+    ``voice_id`` in subsequent /api/tts calls. Downloads use HTTP Range
+    resume and retry up to 5 times on failure.
     """
-    # Determine voice_id
+    audio_url = (req.audio_url or "").strip()
+    if not audio_url:
+        raise HTTPException(status_code=400, detail="audio_url must not be empty")
+    parsed = urlparse(audio_url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="audio_url must be an http(s) URL")
+
+    voice_id = req.voice_id
     if not voice_id:
         voice_id = f"voice_{uuid.uuid4().hex[:8]}"
 
-    # Sanitize voice_id (alphanumeric + underscore + hyphen only)
     safe_id = "".join(c for c in voice_id if c.isalnum() or c in "_-")
     if not safe_id:
         raise HTTPException(status_code=400, detail="Invalid voice_id")
 
-    # Determine file extension
-    original_name = file.filename or "audio.wav"
-    ext = os.path.splitext(original_name)[1].lower()
-    if ext not in (".wav", ".mp3", ".flac", ".ogg"):
-        ext = ".wav"
-
+    ext = guess_audio_ext(audio_url)
     save_filename = f"{safe_id}{ext}"
     save_path = os.path.join(PROMPTS_DIR, save_filename)
 
-    # Save the uploaded file
-    content = await file.read()
-    with open(save_path, "wb") as f:
-        f.write(content)
+    try:
+        file_size = await asyncio.to_thread(download_with_resume, audio_url, save_path, 5)
+    except Exception as e:
+        # Keep .part for a possible later resume of the same destination.
+        print(f"[clone] download failed: {e}")
+        raise HTTPException(status_code=502, detail=f"Failed to download audio_url: {e}")
 
-    file_size = os.path.getsize(save_path)
-
+    result_url = path_to_download_url(save_path)
     return CloneResponse(
         voice_id=safe_id,
         message=f"Voice profile '{safe_id}' saved ({file_size} bytes). Ready for TTS.",
-        audio_path=save_path,
+        audio_url=result_url,
     )
 
 
@@ -439,7 +532,6 @@ async def text_to_speech(req: TTSRequest):
 
     return TTSResponse(
         audio_url=audio_url,
-        audio_path=output_path,
         duration_seconds=round(elapsed, 2),
     )
 
