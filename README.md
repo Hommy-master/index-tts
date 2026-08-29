@@ -1,6 +1,6 @@
 # IndexTTS REST API
 
-零样本声音克隆 + 语音合成 HTTP 服务。默认监听 **9880**，交互式文档见 `/docs`（Swagger）与 `/redoc`。
+零样本声音克隆 + 语音合成 HTTP 服务。默认监听 **9880**，交互式文档：`/docs`（Swagger）、`/redoc`。
 
 ## 快速开始
 
@@ -16,12 +16,21 @@ curl http://127.0.0.1:9880/api/health
 |---|---|
 | Base URL | `http://<host>:9880` |
 | 默认模型 | IndexTTS-2.5（`--version 2.5`） |
-| 音色目录 | `/app/prompts`（宿主机 `docker/prompts`） |
-| 合成输出 | `/app/output`（宿主机 `docker/output`） |
-| 音频外链 | 环境变量 `DOWNLOAD_URL`，将路径前缀 `/app/` 替换为该 URL |
+| 音色目录 | `/app/prompts` → 宿主机 `docker/prompts` |
+| 合成输出 | `/app/output` → 宿主机 `docker/output` |
+| 音频外链 | 环境变量 `DOWNLOAD_URL`：把容器路径前缀 `/app/` 替换为该 URL |
 
-`DOWNLOAD_URL` 示例：`http://192.168.3.21/`  
-则 `/app/output/tts_xxx.wav` → `http://192.168.3.21/output/tts_xxx.wav`
+`DOWNLOAD_URL` 示例：`http://192.168.3.21/`
+
+| 容器内路径 | 对外 URL |
+|---|---|
+| `/app/prompts/alice.wav` | `http://192.168.3.21/prompts/alice.wav` |
+| `/app/output/tts_xxx.wav` | `http://192.168.3.21/output/tts_xxx.wav` |
+
+未配置 `DOWNLOAD_URL` 时回退为：
+
+- 音色文件 → `/api/voices/{voice_id}/audio`
+- 合成文件 → `/api/audio/{filename}`
 
 ---
 
@@ -30,12 +39,12 @@ curl http://127.0.0.1:9880/api/health
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | `GET` | `/api/health` | 健康检查 |
-| `POST` | `/api/clone` | 通过音频 URL 下载并创建音色 |
+| `POST` | `/api/clone` | 按 `audio_url` 下载参考音频并创建音色 |
 | `GET` | `/api/voices` | 列出已保存音色 |
 | `DELETE` | `/api/voices/{voice_id}` | 删除音色 |
 | `GET` | `/api/voices/{voice_id}/audio` | 下载音色参考音频 |
 | `POST` | `/api/tts` | 文本转语音 |
-| `GET` | `/api/audio/{filename}` | 下载合成音频（本地回退路径） |
+| `GET` | `/api/audio/{filename}` | 下载合成音频（本地回退） |
 
 ---
 
@@ -43,7 +52,7 @@ curl http://127.0.0.1:9880/api/health
 
 确认模型已加载、服务可用。
 
-**响应示例**
+**响应** `200`
 
 ```json
 {
@@ -58,12 +67,12 @@ curl http://127.0.0.1:9880/api/health
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `status` | string | 固定为 `healthy` |
+| `status` | string | 固定 `healthy` |
 | `model_version` | string | `2` 或 `2.5` |
 | `model_loaded` | bool | 模型是否已加载 |
 | `gpu_available` | bool | 是否检测到 GPU |
-| `vram_gb` | number \| null | 显存大小（GB） |
-| `half_precision` | bool | 是否启用半精度 |
+| `vram_gb` | number \| null | 显存（GB） |
+| `half_precision` | bool | 是否半精度 |
 
 ```bash
 curl http://127.0.0.1:9880/api/health
@@ -73,16 +82,16 @@ curl http://127.0.0.1:9880/api/health
 
 ## POST `/api/clone`
 
-通过参考音频的 HTTP(S) URL 创建零样本音色。服务端自动下载文件（失败最多重试 5 次，使用 HTTP Range **断点续传**），保存到 `prompts` 后返回可访问的 `audio_url`。
+通过参考音频的 HTTP(S) URL 创建零样本音色。服务端自动下载（失败最多重试 **5** 次，HTTP Range **断点续传**），保存到 `prompts`，返回可访问的 `audio_url`。
 
 **Content-Type:** `application/json`
 
+### 请求体
+
 | 字段 | 类型 | 必填 | 说明 |
 |------|------|------|------|
-| `audio_url` | string | 是 | 参考音频下载地址（`http` / `https`），支持 `.wav` / `.mp3` / `.flac` / `.ogg` |
+| `audio_url` | string | 是 | 参考音频地址（`http` / `https`），扩展名支持 `.wav` / `.mp3` / `.flac` / `.ogg` |
 | `voice_id` | string | 否 | 音色名（仅字母数字、`_`、`-`）。省略则自动生成 |
-
-**请求示例**
 
 ```json
 {
@@ -91,7 +100,7 @@ curl http://127.0.0.1:9880/api/health
 }
 ```
 
-**响应** `200`
+### 响应 `200`
 
 ```json
 {
@@ -105,16 +114,14 @@ curl http://127.0.0.1:9880/api/health
 |------|------|------|
 | `voice_id` | string | 后续 TTS 使用的 ID |
 | `message` | string | 提示信息 |
-| `audio_url` | string | 本地保存后的访问地址（`DOWNLOAD_URL` 将 `/app/` 替换后的结果） |
+| `audio_url` | string | 本地保存后的访问地址（`DOWNLOAD_URL` 替换 `/app/`） |
 
-说明：响应中的 `audio_url` 与 TTS 一致，将容器路径 `/app/prompts/...` 的 `/app/` 替换为 `DOWNLOAD_URL`。
-
-**错误**
+### 错误
 
 | HTTP | 说明 |
 |------|------|
 | `400` | `audio_url` 为空/非 http(s)，或 `voice_id` 非法 |
-| `502` | 下载失败（已重试 5 次仍失败） |
+| `502` | 下载失败（已重试 5 次） |
 
 ```bash
 curl -X POST http://127.0.0.1:9880/api/clone \
@@ -146,6 +153,14 @@ curl -X POST http://127.0.0.1:9880/api/clone \
 }
 ```
 
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `voices` | array | 音色列表 |
+| `voices[].voice_id` | string | 音色 ID |
+| `voices[].filename` | string | 文件名 |
+| `voices[].size_bytes` | int | 文件大小 |
+| `count` | int | 数量 |
+
 ```bash
 curl http://127.0.0.1:9880/api/voices
 ```
@@ -154,7 +169,7 @@ curl http://127.0.0.1:9880/api/voices
 
 ## DELETE `/api/voices/{voice_id}`
 
-按 ID 删除音色档案。
+按 ID 删除音色。
 
 **响应** `200`
 
@@ -164,7 +179,7 @@ curl http://127.0.0.1:9880/api/voices
 }
 ```
 
-**错误**
+### 错误
 
 | HTTP | 说明 |
 |------|------|
@@ -178,9 +193,9 @@ curl -X DELETE http://127.0.0.1:9880/api/voices/alice
 
 ## GET `/api/voices/{voice_id}/audio`
 
-下载该音色的参考音频文件（`audio/wav`）。
+下载该音色的参考音频。
 
-**错误**
+### 错误
 
 | HTTP | 说明 |
 |------|------|
@@ -204,7 +219,7 @@ curl -OJ http://127.0.0.1:9880/api/voices/alice/audio
 |------|------|------|------|------|
 | `voice_id` | string | 是 | — | `/api/clone` 返回的 ID，或 `prompts` 中已有文件名（无扩展名） |
 | `text` | string | 是 | — | 待合成文本（不能为空） |
-| `lang` | string | 否 | `ZH` | 语言。v2.5：`ZH` / `EN` / `JA` / `AR` / `ES`；v2：`ZH` / `EN` |
+| `lang` | string | 否 | `ZH` | v2.5：`ZH` / `EN` / `JA` / `AR` / `ES`；v2：`ZH` / `EN` |
 | `speed` | number | 否 | `1.0` | 语速（`duration_factor`）：`<1` 更快，`>1` 更慢 |
 | `do_sample` | bool | 否 | `true` | 是否采样解码 |
 | `top_p` | number | 否 | `0.8` | nucleus sampling |
@@ -227,8 +242,8 @@ curl -OJ http://127.0.0.1:9880/api/voices/alice/audio
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `audio_url` | string | 可访问的下载地址。若配置了 `DOWNLOAD_URL`，为外链；否则为 `/api/audio/{filename}` |
-| `duration_seconds` | number \| null | 推理耗时（秒），非音频时长 |
+| `audio_url` | string | 可访问下载地址（`DOWNLOAD_URL` 外链，或回退 `/api/audio/{filename}`） |
+| `duration_seconds` | number \| null | 推理耗时（秒），**不是**音频时长 |
 
 ### 错误
 
@@ -237,8 +252,6 @@ curl -OJ http://127.0.0.1:9880/api/voices/alice/audio
 | `400` | 文本为空，或 `lang` 不支持 |
 | `404` | `voice_id` 不存在 |
 | `500` | 推理失败或输出文件未生成 |
-
-### 示例
 
 ```bash
 curl -X POST http://127.0.0.1:9880/api/tts \
@@ -267,9 +280,9 @@ curl -X POST http://127.0.0.1:9880/api/tts \
 
 ## GET `/api/audio/{filename}`
 
-按文件名下载 `output` 目录中的合成 WAV。当未配置 `DOWNLOAD_URL` 时，`audio_url` 会指向此接口。
+按文件名下载 `output` 目录中的合成 WAV。未配置 `DOWNLOAD_URL` 时，TTS 的 `audio_url` 会指向此接口。
 
-**错误**
+### 错误
 
 | HTTP | 说明 |
 |------|------|
@@ -284,10 +297,10 @@ curl -OJ http://127.0.0.1:9880/api/audio/tts_1710000000_ab12cd.wav
 ## 典型调用流程
 
 ```text
-1. POST /api/clone          → 得到 voice_id
-2. GET  /api/voices         → 确认音色列表（可选）
-3. POST /api/tts            → 得到 audio_url
-4. GET  audio_url           → 下载 / 播放音频
+1. POST /api/clone   → voice_id + audio_url（音色已落盘）
+2. GET  /api/voices  → 确认列表（可选）
+3. POST /api/tts     → audio_url（合成音频）
+4. GET  audio_url    → 下载 / 播放
 ```
 
 Python 示例：
@@ -306,8 +319,9 @@ r = requests.post(
     },
 )
 r.raise_for_status()
-voice_id = r.json()["voice_id"]
-print(r.json()["audio_url"])
+data = r.json()
+voice_id = data["voice_id"]
+print("clone:", data["audio_url"])
 
 # 2. 合成
 r = requests.post(
@@ -320,7 +334,8 @@ r = requests.post(
     },
 )
 r.raise_for_status()
-print(r.json()["audio_url"])
+print("tts:", r.json()["audio_url"])
+print("elapsed:", r.json()["duration_seconds"], "s")
 ```
 
 ---
@@ -329,5 +344,5 @@ print(r.json()["audio_url"])
 
 - 推理串行执行（进程内锁），并发请求会排队。
 - CORS 已放开（`*`），可直接从浏览器调用。
-- 交互式调试：打开 `http://<host>:9880/docs`。
-- 若通过 Nginx 等对外提供 `DOWNLOAD_URL`，需将 URL 路径 `/output/` 映射到宿主机的 `output` 目录。
+- 在线调试：`http://<host>:9880/docs`。
+- 使用 `DOWNLOAD_URL` 时，需用 Nginx 等把 `/prompts/`、`/output/` 分别映射到宿主机的 `prompts`、`output` 目录。
